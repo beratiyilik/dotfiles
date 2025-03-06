@@ -1,0 +1,187 @@
+#!/bin/zsh
+
+# prints a greeting with the provided name
+function greeting() {
+  echo "Hello $1"
+}
+
+# returns the current unix timestamp
+function _getTimestamp(){
+ local timestamp=$(date +%s)
+ echo $timestamp
+}
+
+# returns the current date in YYYYMMDD format
+function _getDateAsPrefix(){
+  echo $(date +%Y%m%d)
+}
+
+# checks if the given path is a file
+function _isFile(){
+  local filePath=$1
+  if [ -f ${filePath} ]; then
+      echo "true"
+  else
+      echo "false"
+  fi
+}
+
+# checks if the given path is a directory
+function _isDirectory(){
+  local directoryPath=$1
+  if [ -d ${directoryPath} ]; then
+      echo "true"
+  else
+      echo "false"
+  fi
+}
+
+# creates a backup of given files by appending a timestamp
+function _bakFile(){
+  local timestamp=$(_getTimestamp)
+  local arr=("$@")
+  for i in "${arr[@]}"; do
+    if [ -f ${i} ]; then
+      echo "cp $i $i.$timestamp-bak"
+      cp $i $i.$timestamp-bak
+    fi
+  done
+}
+
+# generates a SHA256 hash for a given file using shasum
+function _generateSHA256() {
+  if [[ -f $1 ]]; then
+      shasum -a 256 "$1" | awk '{ print $1 }'
+  else
+      echo "Error: File not found"
+  fi
+}
+
+# generates a SHA256 hash for a given file using openssl
+function _checksumSHA256() {
+  openssl dgst -sha256 "$1"
+}
+
+# kills processes running on the specified ports (up to 3). Defaults to port 8080 if none provided.
+function _killProcessesOnPorts() {
+  local defaultPort=8080
+  local ports=("$@")
+
+  if [ ${#ports[@]} -gt 3 ]; then
+    echo "Error: Too many arguments. Please provide up to 3 port numbers."
+    return 1
+  fi
+
+  if [ ${#ports[@]} -eq 0 ]; then
+    ports=($defaultPort)
+  fi
+
+  for portNumber in "${ports[@]}"; do
+    local processIds=$(lsof -i :${portNumber} -t)
+    if [ -z "${processIds}" ]; then
+      echo "No process is running on port ${portNumber}"
+    else
+      echo "Killing processes on port ${portNumber}: ${processIds}"
+      for pid in ${processIds}; do
+        kill -9 ${pid}
+        echo "Process ${pid} is killed"
+      done
+    fi
+  done
+}
+
+# compresses a file or folder into a tar.gz archive
+function _tarc() {
+  # check if the first argument (the file/folder to archive) is provided
+  if [ -z "$1" ]; then
+    echo "Usage: tarc <file_or_folder> [output_filename]"
+    return 1
+  fi
+
+  local input="$1"
+  local output="$2"
+
+  # verify that the input path exists
+  if [ -e "$input" ]; then
+    # if no second argument is given, derive the name from the input
+    if [ -z "$output" ]; then
+      output="$(basename "$input")"
+      output="${output%.*}"  # remove the file extension if present
+    fi
+    
+    # create the tar.gz archive
+    tar -czvf "${output}.tar.gz" "$input"
+  else
+    echo "Error: $input is not a valid file or directory."
+    return 1
+  fi
+}
+
+# extracts a tar.gz archive
+function _tarx() {
+  if [ -z "$1" ]; then
+    echo "Usage: tarx <file.tar.gz>"
+    return 1
+  fi
+
+  if [ -f "$1" ] && [[ "$1" =~ \.tar\.gz$ ]]; then
+    tar -xzvf "$1"
+  else
+    echo "Error: $1 is not a valid tar.gz file."
+    return 1
+  fi
+}
+
+# extracts tar.gz, zip, or rar files based on file extension
+function _extract() {
+  if [ -z "$1" ]; then
+    echo "Usage: extract <file>"
+    return 1
+  fi
+
+  case "$1" in
+    *.tar.gz)
+      if ! command -v tar > /dev/null; then
+        echo "tar is not installed. Please install tar to use this function."
+        return 1
+      fi
+      tar xzvf "$1"
+      ;;
+    *.zip)
+      if ! command -v unzip > /dev/null; then
+        echo "unzip is not installed. Please install unzip to use this function."
+        return 1
+      fi
+      unzip "$1"
+      ;;
+    *.rar)
+      if ! command -v unrar > /dev/null; then
+        echo "unrar is not installed. Please install unrar to use this function."
+        return 1
+      fi
+      unrar x "$1"
+      ;;
+    *)
+      echo "Unsupported file format: $1"
+      return 1
+      ;;
+  esac
+}
+
+# creates a tar.gz archive of the given file or folder
+function _backup_tar() {
+  # check if the first argument (the file/folder to backup) is provided
+  if [ -z "$1" ]; then
+    echo "Usage: backup <file_or_folder>"
+    return 1
+  fi
+
+  local input="$1"
+  local date_prefix="$(_getDateAsPrefix)"
+  local output="${date_prefix}-$(basename "$input")"
+
+  # call the existing _tarc function
+  _tarc "$input" "$output"
+}
+
+## eof

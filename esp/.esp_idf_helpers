@@ -1,0 +1,75 @@
+#!/bin/bash
+
+ESP_IDF_HELPERS_DIR="$HOME/esp/.esp_idf_helpers"
+ESP32_IDF="$HOME/esp/esp-idf"
+ESP8266_COMPILER="$HOME/esp/xtensa-lx106-elf/bin"
+OLD_ESP8266_SDK="$HOME/esp/ESP8266_RTOS_SDK"
+
+export IDF_PATH="$HOME/esp/esp-idf"
+export PATH="$IDF_PATH/tools:$PATH"
+# export IDF_PATH="$HOME/esp/ESP8266_RTOS_SDK"
+# export PATH="$IDF_PATH/tools:$PATH"
+# export PATH="$HOME/esp/xtensa-lx106-elf/bin:$PATH"
+
+function _switch_esp_env() {
+    # unset previous environment variables to prevent conflicts
+    unset IDF_PATH
+    export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "$HOME/esp" | tr '\n' ':')
+
+    case "$1" in
+        esp32)
+            if [ -d "$ESP32_IDF" ]; then
+                export IDF_PATH="$ESP32_IDF"
+                . "$ESP32_IDF/export.sh"
+                echo -e "\e[32mSwitched to ESP32 environment.\e[0m"
+            else
+                echo -e "\e[31mError: ESP32 IDF not found at $ESP32_IDF.\e[0m"
+            fi
+            ;;
+        esp8266)
+            if [ -x "$ESP8266_COMPILER/xtensa-lx106-elf-gcc" ]; then
+                if [[ ":$PATH:" != *":$ESP8266_COMPILER:"* ]]; then
+                    export PATH="$ESP8266_COMPILER:$PATH"
+                fi
+                echo -e "\e[32mSwitched to ESP8266 environment.\e[0m"
+            else
+                echo -e "\e[31mError: ESP8266 compiler not found at $ESP8266_COMPILER.\e[0m"
+            fi
+            ;;
+        old_esp8266)
+            if [ -d "$OLD_ESP8266_SDK" ]; then
+                export IDF_PATH="$OLD_ESP8266_SDK"
+                . "$OLD_ESP8266_SDK/export.sh"
+                echo -e "\e[32mSwitched to Old ESP8266 SDK environment.\e[0m"
+            else
+                echo -e "\e[31mError: Old ESP8266 SDK not found at $OLD_ESP8266_SDK.\e[0m"
+            fi
+            ;;
+        *)
+            echo -e "\e[33mUsage: switch_esp_env {esp32 | esp8266 | old_esp8266}\e[0m"
+            ;;
+    esac
+}
+
+function _espIdfEnvSwitchCompletion() {
+    local curw=${COMP_WORDS[COMP_CWORD]}
+    local envs="esp32 esp8266 old_esp8266"
+
+    COMPREPLY=($(compgen -W "$envs" -- "$curw"))
+}
+
+# apply completion to all related commands
+complete -F _espIdfEnvSwitchCompletion _switch_esp_env esp32 esp8266 old_esp8266
+
+# alias get_idf=". $HOME/esp/esp-idf/export.sh"                       # load esp-idf (esp32)
+# alias get_lx106="export PATH=$PATH:$HOME/esp/xtensa-lx106-elf/bin"  # load esp8266 compiler
+# alias get_idf_old=". $HOME/esp/ESP8266_RTOS_SDK/export.sh"          # load old esp8266 sdk
+alias esp32="_switch_esp_env esp32"
+alias esp8266="_switch_esp_env esp8266"
+alias old_esp8266="_switch_esp_env old_esp8266"
+
+# esp-idf helper scripts
+# [[ -f "$HOME/esp/.esp_idf_helpers" ]] && source "$HOME/esp/.esp_idf_helpers"
+# [[ -f "$ESP_IDF_HELPERS_DIR" ]] && source "$ESP_IDF_HELPERS_DIR"
+
+## eof
