@@ -6,15 +6,15 @@
 
 # if the shell is not interactive, do nothing.
 [[ -z "$PS1" ]] && return
-# checks if we are in a debian chroot and, if so, sets a helpful variable.
-if [[  -z "$debian_chroot" ]] && [[ -r /etc/debian_chroot ]]; then
-  debian_chroot=$(cat /etc/debian_chroot)
-fi
 
 # ============================================================
 # CORE ENVIRONMENT VARIABLES & PATH SETTINGS
 # ============================================================
-# (no variables explicitly set here in original)
+
+export LS_COLORS='ex=01;33:fi=00:di=01;34:ln=01;36:pi=40;33:so=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=01;05;37;41:'
+export GREP_OPTIONS='--color=auto'
+export GREP_COLOR='1;32'
+export STARSHIP_SSH_IP=$(who am I | awk '{print $NF}' | tr -d '()')
 
 # ============================================================
 # CUSTOM ENVs, FUNCTIONS AND ALIASES
@@ -43,57 +43,18 @@ shopt -s checkwinsize
 # PROMPT & VISUAL CUSTOMIZATIONS
 # ============================================================
 
-# enable colored prompt if the terminal supports it
-case "$TERM" in
-  xterm-color) color_prompt=yes ;;
-esac
-# allow forcing color prompt
-if [[ -n "$force_color_prompt" ]]; then
-  if [[ -x /usr/bin/tput ]] && tput setaf 1 >&/dev/null; then
-    color_prompt=yes
-  else
-    color_prompt=
-  fi
-fi
-# define the prompt based on color support
-if [[ "$color_prompt" == "yes" ]]; then
-  PS1='${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
-else
-  PS1='${debian_chroot:+($debian_chroot)}\u@\h:\w\$ '
-fi
-# unset temporary variables
-unset color_prompt force_color_prompt
-# set the title bar of xterm or rxvt terminals
-case "$TERM" in
-  xterm*|rxvt*)
-    PS1="\[\e]0;${debian_chroot:+($debian_chroot)}\u@\h: \w\a\]$PS1"
-    ;;
-esac
-# enable color support for ls and grep if dircolors exists
-if [[ -x /usr/bin/dircolors ]]; then
-    if [[ -r ~/.dircolors ]]; then
-        eval "$(dircolors -b ~/.dircolors)"
-    else
-        eval "$(dircolors -b)"
-    fi
-
-    alias ls='ls --color=auto'
-    alias grep='grep --color=auto'
-    alias fgrep='fgrep --color=auto'
-    alias egrep='egrep --color=auto'
-fi
-#
-COLOR_USERNAME="\[\033[01;32m\]"
-COLOR_HOSTNAME="\[\033[0m\]"
-COLOR_PATH="\[\033[01;34m\]"
-if [[ -z "$IP" ]]; then
-    export IP=$(curl -s ifconfig.me)
-fi
-PS1="${COLOR_USERNAME}\u${COLOR_HOSTNAME}@${IP} ${COLOR_PATH}\W \$ "
+eval "$(starship init bash)"
 
 # ============================================================
 # DEVELOPMENT TOOLS, FRAMEWORKS, SDKs AND ENVIRONMENTS
 # ============================================================
-# (no specific tool/application configs in original aside from sources above)
+
+export NVM_DIR="$HOME/.nvm"
+[[ -s "$NVM_DIR/nvm.sh" ]] && source "$NVM_DIR/nvm.sh"
+[[ -s "$NVM_DIR/bash_completion" ]] && source "$NVM_DIR/bash_completion"
+
+source /etc/profile.d/bash_completion.sh
+source /usr/share/doc/fzf/examples/key-bindings.bash
+eval "$(zoxide init bash)"
 
 ## eof

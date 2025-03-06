@@ -1,96 +1,73 @@
 # Dotfiles
 
-This repository contains my personal dotfiles and configuration settings for various tools and environments.
+This repository contains my personal dotfiles and configuration files for various tools and applications. These dotfiles help maintain a consistent development environment across different machines.
 
-## Overview
+## 🗂 Contents
 
-These dotfiles are designed to provide a consistent and efficient development environment across different machines. The configuration includes settings for:
+- Shell Configuration
+  - `.bashrc` - Bash shell configuration
+  - `.bash_aliases` - Custom shell aliases
+  - `.bash_functions` - Custom shell functions
+  - `.bash_env` - Environment variables
+  - `.profile` - Login shell configuration
 
-- Shell (Bash)
-- Git
-- Vim
-- Nano
-- AWS
-- ESP (ESP32/ESP8266 development)
-- Various other tools and utilities
+- Editor Configuration
+  - `.vimrc` - Vim editor configuration
+  - `.nanorc` - Nano editor configuration
 
-## Structure
+- Git Configuration
+  - `.gitconfig` - Git global configuration
 
-```
-.
-├── .aws/           # AWS configuration files
-├── .config/        # Application-specific configurations
-├── .bashrc         # Main bash configuration
-├── .bash_aliases   # Shell aliases
-├── .bash_env       # Environment variables
-├── .bash_functions # Custom shell functions
-├── .gitconfig      # Git configuration
-├── .nanorc         # Nano editor configuration
-├── .profile        # Shell profile
-└── .vimrc          # Vim editor configuration
-```
+- Terminal Customization
+  - `.config/starship.toml` - Starship prompt configuration
 
-## Installation
+- Cloud Configuration
+  - `.aws/` - AWS CLI configuration directory
+
+## 🚀 Installation
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/beratiyilik/dotfiles.git
+   git clone https://github.com/beratiyilik/dotfiles.git ~/.dotfiles
    ```
 
-2. Run the installation script (if available) or manually symlink the files:
+2. Create symbolic links:
    ```bash
-   cd dotfiles
-   # Symlink the files to your home directory
-   ln -s ~/dotfiles/.bashrc ~/.bashrc
-   ln -s ~/dotfiles/.bash_aliases ~/.bash_aliases
-   ln -s ~/dotfiles/.bash_env ~/.bash_env
-   ln -s ~/dotfiles/.bash_functions ~/.bash_functions
-   ln -s ~/dotfiles/.gitconfig ~/.gitconfig
-   ln -s ~/dotfiles/.nanorc ~/.nanorc
-   ln -s ~/dotfiles/.profile ~/.profile
-   ln -s ~/dotfiles/.vimrc ~/.vimrc
+   ln -s ~/.dotfiles/.bashrc ~/.bashrc
+   ln -s ~/.dotfiles/.bash_aliases ~/.bash_aliases
+   ln -s ~/.dotfiles/.bash_functions ~/.bash_functions
+   ln -s ~/.dotfiles/.bash_env ~/.bash_env
+   ln -s ~/.dotfiles/.profile ~/.profile
+   ln -s ~/.dotfiles/.vimrc ~/.vimrc
+   ln -s ~/.dotfiles/.nanorc ~/.nanorc
+   ln -s ~/.dotfiles/.gitconfig ~/.gitconfig
+   ln -s ~/.dotfiles/.config/starship.toml ~/.config/starship.toml
    ```
 
-3. Restart your shell or run:
-   ```bash
-   source ~/.bashrc
-   ```
+## ⚙️ Features
 
-## Features
-
-### Shell Configuration
-- Custom environment variables
-- Useful aliases for common commands
-- Custom shell functions for improved productivity
-- Interactive shell features and prompt customization
-
-### Git Configuration
-- User information
-- Core editor settings
-- Custom aliases
-- Color schemes and formatting
-
-### Editor Settings
-- Vim configuration for efficient editing
-- Nano editor preferences
-- Syntax highlighting and formatting rules
-
-### Development Tools
+- Customized shell prompt using Starship
+- Useful shell aliases and functions
+- Git configuration with helpful aliases
+- Vim and Nano editor configurations
 - AWS CLI configuration
-- ESP32/ESP8266 development environment setup
-- Various development tool configurations
 
-## Maintenance
+## 🔧 Customization
 
-To update your dotfiles:
-1. Make changes to the files in this repository
-2. Commit and push the changes
-3. Pull the changes on other machines where you use these dotfiles
+Feel free to fork this repository and modify any of the configurations to match your preferences. The configurations are well-commented and organized for easy customization.
 
-## License
+## 📝 Requirements
+
+- Git
+- Bash shell
+- Vim (optional)
+- Nano (optional)
+- [Starship](https://starship.rs/) - Cross-shell prompt
+
+## 📄 License
 
 This project is open source and available under the MIT License.
 
-## Contributing
+## 👤 Author
 
-Feel free to submit issues and enhancement requests!
+- [@beratiyilik](https://github.com/beratiyilik)
