@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# user information
+USER_USERNAME="beratiyilik"
+USER_FULLNAME="Berat Iyilik"
+USER_EMAIL=""
+
+# shell environment file names
+SHENV=".bash_env"
+SHRC=".bashrc"
+SH_FUNCTIONS=".bash_functions"
+SH_ALIASES=".bash_aliases"
+WORKSPACE="repos"
+
+# directories
+SHENV_DIR="$HOME/$SHENV"
+SHRC_DIR="$HOME/$SHRC"
+SH_FUNCTIONS_DIR="$HOME/$SH_FUNCTIONS"
+SH_ALIASES_DIR="$HOME/$SH_ALIASES"
+SHH_CONFIG_DIR="$HOME/.ssh/config"
+WORKSPACE_DIR="$HOME/$WORKSPACE"
+GITCONFIG_DIR="$HOME/.gitconfig"
+AWS_HELPERS_DIR="$HOME/.aws/.aws_helpers"
+ESP_IDF_HELPERS_DIR="$HOME/esp/.esp_idf_helpers"
+
+# github configuration
+GITHUB_HOSTNAME="https://github.com/"
+GITHUB_GIST_HOSTNAME="https://gist.github.com/"
+GITHUB_GIST_GITHUBUSERCONTENT_HOSTNAME="https://gist.githubusercontent.com/"
+GITHUB_PERSONAL_ACCESS_TOKEN=""
+
+# npm configuration
+NPM_ACCESS_TOKEN=""
+
+## eof
