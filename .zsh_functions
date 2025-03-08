@@ -184,4 +184,53 @@ function _backup_tar() {
   _tarc "$input" "$output"
 }
 
+# opens a new terminal window with the specified directory, profile, and command
+function _open_terminal() {
+    local dir="$HOME"
+    local profile="Ubuntu"
+    local command=""
+    local args=()
+
+    while [[ "$#" -gt 0 ]]; do
+        case "$1" in
+            -d|--dir)
+                dir="$2"
+                shift 2
+                ;;
+            -p|--profile)
+                profile="$2"
+                shift 2
+                ;;
+            -c|--command)
+                command="$2"
+                shift 2
+                ;;
+            *)
+                args+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    if [[ ${#args[@]} -gt 0 ]]; then dir="${args[0]}"; fi
+    if [[ ${#args[@]} -gt 1 ]]; then profile="${args[1]}"; fi
+    if [[ ${#args[@]} -gt 2 ]]; then command="${args[2]}"; fi
+
+    if [[ -n "$command" ]]; then
+        osascript <<EOF
+tell application "Terminal"
+    do script "cd $dir && $command"
+    set current settings of front window to settings set "$profile"
+end tell
+EOF
+    else
+        osascript <<EOF
+tell application "Terminal"
+    do script "cd $dir"
+    set current settings of front window to settings set "$profile"
+end tell
+EOF
+    fi
+}
+
 ## eof

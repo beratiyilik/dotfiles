@@ -74,4 +74,7 @@ alias bkptar="_backup_tar"  # backup file or folder
 alias cat="bat --style=plain"
 alias less="bat --paging=always"
 
+# open terminal
+alias openterm="_open_terminal"
+
 ## eof

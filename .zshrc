@@ -16,21 +16,23 @@ export PATH="$BREW_DIR/bin:$BREW_DIR/sbin:$PATH"
 export MANPATH="$BREW_DIR/share/man:$MANPATH"
 export INFOPATH="$BREW_DIR/share/info:$INFOPATH"
 
-# openssl
+# common flags if needed
 [[ -z "$LDFLAGS" ]] && export LDFLAGS=""
 [[ -z "$CPPFLAGS" ]] && export CPPFLAGS=""
-export PATH="$BREW_DIR/opt/openssl@3/bin:$PATH"
-export LDFLAGS="$LDFLAGS -L$BREW_DIR/opt/openssl@3/lib"
-export CPPFLAGS="$CPPFLAGS -I$BREW_DIR/opt/openssl@3/include"
+
+# python and pyenv
+# export PATH="$HOME/Library/Python/3.9/bin:$PATH"
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init --path)"
+eval "$(pyenv init -)"
 
 # docker
 # export PATH="$BREW_DIR/opt/docker/bin:$PATH"
 export PATH="/Applications/Docker.app/Contents/Resources/bin:$PATH"
 
-# llvm
-export PATH="$BREW_DIR/opt/llvm/bin:$PATH"
-export LDFLAGS="$LDFLAGS -L$BREW_DIR/opt/llvm/lib"
-export CPPFLAGS="$CPPFLAGS -I$BREW_DIR/opt/llvm/include"
+# code
+export PATH="/Applications/Visual Studio Code.app/Contents/Resources/app/bin:$PATH"
 
 # cmake
 export PATH="$BREW_DIR/opt/cmake/bin:$PATH"
@@ -39,14 +41,15 @@ export PATH="$BREW_DIR/opt/cmake/bin:$PATH"
 export DOTNET_ROOT="$BREW_DIR/opt/dotnet-sdk"
 export PATH="$HOME/.dotnet/tools:$PATH"
 
-# python
-# export PATH="$HOME/Library/Python/3.9/bin:$PATH"
+# llvm
+export PATH="$BREW_DIR/opt/llvm/bin:$PATH"
+export LDFLAGS="$LDFLAGS -L$BREW_DIR/opt/llvm/lib"
+export CPPFLAGS="$CPPFLAGS -I$BREW_DIR/opt/llvm/include"
 
-# pyenv
-export PYENV_ROOT="$HOME/.pyenv"
-export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init --path)"
-eval "$(pyenv init -)"
+# openssl
+export PATH="$BREW_DIR/opt/openssl@3/bin:$PATH"
+export LDFLAGS="$LDFLAGS -L$BREW_DIR/opt/openssl@3/lib"
+export CPPFLAGS="$CPPFLAGS -I$BREW_DIR/opt/openssl@3/include"
 
 # ruby and rbenv
 export PATH="$BREW_DIR/opt/ruby/bin:$PATH"
@@ -54,26 +57,31 @@ if command -v rbenv &> /dev/null; then
   eval "$(rbenv init -)"
 fi
 
-# cursor
-# export PATH="$BREW_DIR/bin:$PATH"
-export PATH="/Applications/Cursor.app/Contents/Resources/app/bin:$PATH"
+# bat (cat with syntax highlighting)
+export LESSOPEN="| bat --paging=never %s"
+export LESS=" -R "
 
 # wireshark and tshark
 export PATH="/Applications/Wireshark.app/Contents/MacOS:$PATH"
 # sudo ln -s /Applications/Wireshark.app/Contents/MacOS/wireshark /usr/local/bin/wireshark
 # sudo ln -s /Applications/Wireshark.app/Contents/MacOS/tshark /usr/local/bin/tshark
 
-# bat (cat with syntax highlighting)
-export LESSOPEN="| bat --paging=never %s"
-export LESS=" -R "
+# azure data studio
+# export PATH="/Applications/Azure Data Studio.app/Contents/Resources/app/bin:$PATH"
+
+# cursor
+# export PATH="/Applications/Cursor.app/Contents/Resources/app/bin:$PATH"
+
+# coteditor
+export PATH="/Applications/CotEditor.app/Contents/SharedSupport/bin:$PATH"
 
 # ============================================================
 # CUSTOM ENVs, FUNCTIONS AND ALIASES
 # ============================================================
 
-# [[ -f "$HOME/.zshenv" ]] && source "$HOME/.zshenv"
-[[ -f "$SH_FUNCTIONS_DIR" ]] && source "$SH_FUNCTIONS_DIR"
-[[ -f "$SH_ALIASES_DIR" ]] && source "$SH_ALIASES_DIR"
+# [[ -f "$HOME/.zshenv" ]] && source "$HOME/.zshenv"         # custom envs
+[[ -f "$SH_FUNCTIONS_DIR" ]] && source "$SH_FUNCTIONS_DIR"   # custom functions
+[[ -f "$SH_ALIASES_DIR" ]] && source "$SH_ALIASES_DIR"       # custom aliases
 
 # ============================================================
 # OH-MY-ZSH, PLUGINS AND CONFIGURATIONS
@@ -81,7 +89,7 @@ export LESS=" -R "
 
 export ZSH=$HOME/.oh-my-zsh
 ZSH_THEME="powerlevel10k/powerlevel10k"
-plugins=(git fzf autojump direnv sudo tmux python pip virtualenv pyenv node npm yarn nvm golang rust gradle dotnet docker docker-compose kubectl zsh-autosuggestions zsh-syntax-highlighting zsh-history-substring-search fast-syntax-highlighting colored-man-pages alias-finder extract)
+plugins=(git fzf autojump direnv sudo tmux python pip virtualenv pyenv node npm yarn nvm golang rust gradle dotnet docker docker-compose kubectl zsh-syntax-highlighting zsh-history-substring-search fast-syntax-highlighting colored-man-pages alias-finder extract)
 source $ZSH/oh-my-zsh.sh
 [[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
 

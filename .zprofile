@@ -25,7 +25,9 @@
 #    - Start an agent or background service
 
 # Example (print a greeting if you want):
-echo "Welcome, $USER! You're logged into $(hostname). It's currently $(date '+%A, %B %d, %Y %I:%M %p')."
+# echo "Welcome, $USER! You're logged into $(hostname). It's currently $(date '+%A, %B %d, %Y %I:%M %p')."
+echo "👨‍💻 $USER@$(hostname) | 📅 $(date '+%a %b %-d %I:%M %p')"
+# echo "👨‍💻 $USER@$(hostname) | 📁 $(pwd) | 🖥️  RAM: $(top -l 1 | awk '/PhysMem/ {print $2 " used / " $6 " total"}') | 💾 Disk: $(df -h / | awk 'NR==2 {print $3 "/" $2}') | ⏳ Uptime: $(uptime | awk -F'up ' '{print $2}' | awk -F',' '{print $1 " " $2}') | 📅 $(date '+%a %b %-d %I:%M %p')"
 
 # 4) (Optional) If you want to load shell functions, aliases,
 #    or other files only for login shells, you could explicitly
