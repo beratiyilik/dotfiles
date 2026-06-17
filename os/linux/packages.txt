@@ -1,0 +1,12 @@
+# Debian/Ubuntu packages — one package name per line.
+# '#' starts a comment; blank lines are ignored.
+git
+vim
+tmux
+curl
+wget
+jq
+ripgrep
+fzf
+tree
+build-essential

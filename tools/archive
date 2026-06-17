@@ -1,0 +1,388 @@
+#!/usr/bin/env python3
+"""archive — backup, pack, extract, and encrypt files (one tool, four subcommands).
+
+Usage:
+    archive backup  <source> [dest_dir]          # alias: bkf
+    archive pack    <file|dir> [dest_dir]        # alias: tgz
+    archive pack    <name> <src> <src> [src...]  # multi-source tar.gz
+    archive extract <archive> [dest_dir]         # alias: extr
+    archive vault   <input> [-z]                 # encrypt  (alias: vault)
+    archive vault   -d <input.tar[.gz].gpg>      # decrypt
+
+Implementation:
+    tar / zip / gz / bz2 / xz and checksums use the Python standard library
+    (tarfile, zipfile, gzip, bz2, lzma, hashlib). Only rar / 7z / gpg shell
+    out to external tools (unrar or 7-Zip, gnupg).
+
+Dependencies:
+    - Python standard library only for tar / zip / gz / bz2 / xz / checksums
+    - unrar or 7-Zip (rar / 7z), gnupg (vault encrypt/decrypt) — optional
+
+Environment:
+    VAULT_PASSPHRASE   If set, used by `vault` instead of an interactive prompt.
+    NO_COLOR           If set, disable coloured output.
+"""
+
+from __future__ import annotations
+
+import argparse
+import bz2
+import datetime
+import getpass
+import gzip
+import hashlib
+import io
+import os
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import zipfile
+from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# output (colour only on a TTY, and never when NO_COLOR is set)
+# ---------------------------------------------------------------------------
+
+_COLOR = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
+
+
+def _c(code: str) -> str:
+    return code if _COLOR else ""
+
+
+_RESET = _c("\033[0m")
+_BOLD = _c("\033[1m")
+_CYAN = _c("\033[38;5;66m")
+_GREEN = _c("\033[38;5;76m")
+_RED = _c("\033[38;5;196m")
+_YELLOW = _c("\033[38;5;220m")
+
+
+def err(msg: str) -> None:
+    print(f"{_RED}error:{_RESET} {msg}", file=sys.stderr)
+
+
+def hint(msg: str) -> None:
+    print(f"{_YELLOW}hint:{_RESET}  {msg}", file=sys.stderr)
+
+
+def ok(label: str, path) -> None:
+    print(f"{_GREEN}{label}{_RESET} {_CYAN}{path}{_RESET}")
+
+
+def die(msg: str, code: int = 1) -> "NoReturn":  # type: ignore[name-defined]
+    err(msg)
+    raise SystemExit(code)
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
+
+def _find_tool(*names: str) -> str | None:
+    """Return the first of names found on PATH, else None."""
+    for n in names:
+        if shutil.which(n):
+            return n
+    return None
+
+
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 16), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def checksum(path: Path) -> str:
+    """sha256 of a file, or of the sorted per-file digests for a directory."""
+    if not path.is_dir():
+        return _sha256_file(path)
+    h = hashlib.sha256()
+    for f in sorted(p for p in path.rglob("*") if p.is_file()):
+        h.update(_sha256_file(f).encode())
+        h.update(b"\n")
+    return h.hexdigest()
+
+
+def _safe_tar_extract(tf: tarfile.TarFile, dest: Path) -> None:
+    # filter="data" (Python 3.12+) blocks path traversal, absolute paths, and
+    # unsafe member types. Fall back to a plain extract on older interpreters.
+    try:
+        tf.extractall(dest, filter="data")
+    except TypeError:
+        tf.extractall(dest)
+
+# ---------------------------------------------------------------------------
+# backup  (bkf)
+# ---------------------------------------------------------------------------
+
+def cmd_backup(a: argparse.Namespace) -> None:
+    src = Path(a.source)
+    if not src.exists():
+        die(f"'{src}' does not exist.")
+
+    backup_dir = Path(a.backup_dir)
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    ts = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    # pathlib gives dotfile-aware stem/suffix: .bashrc -> (".bashrc", ""),
+    # foo.tar.gz -> ("foo.tar", ".gz"), README -> ("README", "").
+    if src.is_dir():
+        stem, ext = src.name, ""
+    else:
+        stem, ext = src.stem, src.suffix
+
+    backup_path = backup_dir / f"{stem}_{ts}_{os.getpid()}{ext}.bak"
+
+    original = checksum(src)
+    if src.is_dir():
+        shutil.copytree(src, backup_path)
+    else:
+        shutil.copy2(src, backup_path)
+
+    if checksum(backup_path) != original:
+        if backup_path.is_dir():
+            shutil.rmtree(backup_path, ignore_errors=True)
+        else:
+            backup_path.unlink(missing_ok=True)
+        die("checksum mismatch — backup may be corrupt.")
+
+    ok("backup created:", backup_path)
+
+# ---------------------------------------------------------------------------
+# pack  (tgz)
+# ---------------------------------------------------------------------------
+
+def _pack_stem(name: str) -> str:
+    # Mirror the shell: dotfile with a single leading dot keeps its name,
+    # otherwise strip the final extension (foo.txt -> foo, app -> app).
+    if name.startswith(".") and name.count(".") == 1:
+        return name
+    return name.rsplit(".", 1)[0] if "." in name else name
+
+
+def cmd_pack(a: argparse.Namespace) -> None:
+    items = a.items
+
+    multi = len(items) >= 3 or (
+        len(items) == 2 and Path(items[0]).exists() and Path(items[1]).exists()
+    )
+
+    if multi:
+        name = items[0]
+        for suf in (".tar.gz", ".tgz"):
+            if name.endswith(suf):
+                name = name[: -len(suf)]
+        sources = [Path(s) for s in items[1:]]
+        for s in sources:
+            if not s.exists():
+                die(f"'{s}' is not a valid file or directory.")
+        archive_path = Path(f"{name}.tar.gz")
+        try:
+            with tarfile.open(archive_path, "w:gz") as tf:
+                for s in sources:
+                    tf.add(s, arcname=s.name)
+        except OSError as e:
+            archive_path.unlink(missing_ok=True)
+            die(f"archive creation failed: {e}")
+        ok("created archive:", archive_path)
+        return
+
+    # single-source form
+    src = Path(items[0])
+    if not src.exists():
+        die(f"'{src}' is not a valid file or directory.")
+    dest_dir = Path(items[1]) if len(items) >= 2 else src.parent
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    archive_path = dest_dir / f"{_pack_stem(src.name)}.tar.gz"
+    try:
+        with tarfile.open(archive_path, "w:gz") as tf:
+            tf.add(src, arcname=src.name)
+    except OSError as e:
+        archive_path.unlink(missing_ok=True)
+        die(f"archive creation failed: {e}")
+    ok("created archive:", archive_path)
+
+# ---------------------------------------------------------------------------
+# extract  (extr)
+# ---------------------------------------------------------------------------
+
+def _decompress_stream(opener, archive: Path, dest: Path, drop_suffix: str) -> None:
+    out = dest / archive.name[: -len(drop_suffix)]
+    with opener(archive, "rb") as fin, open(out, "wb") as fout:
+        shutil.copyfileobj(fin, fout)
+
+
+def cmd_extract(a: argparse.Namespace) -> None:
+    archive = Path(a.archive)
+    if not archive.is_file():
+        die(f"file not found: '{archive}'.")
+    dest = Path(a.dest_dir)
+    dest.mkdir(parents=True, exist_ok=True)
+
+    name = archive.name.lower()
+
+    if name.endswith((".tar.bz2", ".tbz2", ".tar.gz", ".tgz",
+                      ".tar.xz", ".txz", ".tar")):
+        with tarfile.open(archive) as tf:   # mode/compression auto-detected
+            _safe_tar_extract(tf, dest)
+    elif name.endswith(".bz2"):
+        _decompress_stream(bz2.open, archive, dest, ".bz2")
+    elif name.endswith(".gz"):
+        _decompress_stream(gzip.open, archive, dest, ".gz")
+    elif name.endswith(".zip"):
+        with zipfile.ZipFile(archive) as zf:
+            zf.extractall(dest)             # zipfile sanitises member paths
+    elif name.endswith(".rar"):
+        tool = _find_tool("unrar")
+        if tool:
+            cmd = [tool, "x", "-o+", str(archive), f"{dest}{os.sep}"]
+        elif _find_tool("7zz", "7z"):
+            tool = _find_tool("7zz", "7z")
+            cmd = [tool, "x", str(archive), f"-o{dest}", "-y"]
+        else:
+            die("rar support needs 'unrar' or 7-Zip (brew install sevenzip).")
+        if subprocess.run(cmd).returncode != 0:
+            die("extraction failed.")
+    elif name.endswith(".7z"):
+        tool = _find_tool("7zz", "7z", "7za")
+        if not tool:
+            die("7z support needs 7-Zip (brew install sevenzip).")
+        if subprocess.run([tool, "x", str(archive), f"-o{dest}", "-y"]).returncode != 0:
+            die("extraction failed.")
+    else:
+        die(f"unsupported format: '{archive.name}'.")
+
+    ok("extracted to:", dest)
+
+# ---------------------------------------------------------------------------
+# vault  (gpg-encrypted tar)
+# ---------------------------------------------------------------------------
+
+def _get_passphrase() -> str:
+    p = os.environ.get("VAULT_PASSPHRASE")
+    if not p:
+        p = getpass.getpass("Passphrase: ")
+    if not p:
+        die("a passphrase is required (set VAULT_PASSPHRASE or enter one).")
+    return p
+
+
+def _vault_encrypt(input_path: Path, compress: bool, passphrase: str) -> None:
+    if not input_path.exists():
+        die(f"'{input_path}' does not exist.")
+
+    ext = ".tar.gz.gpg" if compress else ".tar.gpg"
+    output = Path(f"{input_path}{ext}")
+    if output.exists():
+        die(f"'{output}' already exists.")
+
+    fd, tmp = tempfile.mkstemp(suffix=".tar")
+    os.close(fd)
+    try:
+        with tarfile.open(tmp, "w:gz" if compress else "w") as tf:
+            tf.add(input_path, arcname=input_path.name)
+        cmd = [
+            "gpg", "--batch", "--yes", "--pinentry-mode", "loopback",
+            "--passphrase-fd", "0", "--symmetric", "--cipher-algo", "AES256",
+            "--s2k-mode", "3", "--s2k-count", "65011712",
+            "-o", str(output), tmp,
+        ]
+        proc = subprocess.run(cmd, input=f"{passphrase}\n".encode())
+        if proc.returncode != 0:
+            output.unlink(missing_ok=True)
+            die("encryption failed.")
+    finally:
+        os.unlink(tmp)
+
+    ok("encrypted:", output)
+
+
+def _vault_decrypt(input_path: Path, passphrase: str) -> None:
+    if not input_path.is_file():
+        die(f"'{input_path}' does not exist.")
+
+    name = input_path.name.lower()
+    if name.endswith(".tar.gz.gpg"):
+        tar_mode = "r:gz"
+    elif name.endswith(".tar.gpg"):
+        tar_mode = "r:"
+    else:
+        err(f"unrecognised extension: '{input_path.name}'.")
+        hint("expected .tar.gpg or .tar.gz.gpg")
+        raise SystemExit(1)
+
+    cmd = ["gpg", "--batch", "--pinentry-mode", "loopback",
+           "--passphrase-fd", "0", "-d", str(input_path)]
+    proc = subprocess.run(cmd, input=f"{passphrase}\n".encode(),
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if proc.returncode != 0:
+        die("decryption failed (wrong passphrase or corrupt file).")
+
+    with tarfile.open(fileobj=io.BytesIO(proc.stdout), mode=tar_mode) as tf:
+        _safe_tar_extract(tf, Path.cwd())
+
+    ok("decrypted:", input_path)
+
+
+def cmd_vault(a: argparse.Namespace) -> None:
+    if not _find_tool("gpg"):
+        die("vault needs gnupg (brew install gnupg).")
+    passphrase = _get_passphrase()
+    input_path = Path(a.input.rstrip("/"))
+    if a.decode:
+        _vault_decrypt(input_path, passphrase)
+    else:
+        _vault_encrypt(input_path, a.compress, passphrase)
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="archive",
+        description="Backup, pack, extract, and encrypt files.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    pb = sub.add_parser("backup", help="timestamped backup + checksum (alias: bkf)")
+    pb.add_argument("source", help="file or directory to back up")
+    pb.add_argument("backup_dir", nargs="?", default=".",
+                    help="destination directory (default: current)")
+    pb.set_defaults(func=cmd_backup)
+
+    pp = sub.add_parser("pack", help="create a tar.gz archive (alias: tgz)")
+    pp.add_argument("items", nargs="+",
+                    help="<file|dir> [dest_dir]  OR  <name> <src> <src>...")
+    pp.set_defaults(func=cmd_pack)
+
+    pe = sub.add_parser("extract", help="extract any supported archive (alias: extr)")
+    pe.add_argument("archive", help="archive file to extract")
+    pe.add_argument("dest_dir", nargs="?", default=".",
+                    help="destination directory (default: current)")
+    pe.set_defaults(func=cmd_extract)
+
+    pv = sub.add_parser("vault", help="encrypt/decrypt a GPG tar archive (alias: vault)")
+    pv.add_argument("input", help="path to encrypt, or .tar[.gz].gpg to decrypt")
+    pv.add_argument("-d", "--decode", action="store_true",
+                    help="decrypt and extract instead of encrypt")
+    pv.add_argument("-z", "--compress", action="store_true",
+                    help="gzip before encrypting")
+    pv.set_defaults(func=cmd_vault)
+
+    return p
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

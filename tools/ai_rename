@@ -1,0 +1,288 @@
+#!/usr/bin/env python3
+"""ai_rename — rename a file based on its content via a local Ollama model.
+
+Usage:
+    ai_rename <file> [options]
+
+Options:
+    -n, --dry-run       Preview new name without renaming
+    -m, --model MODEL   Ollama model to use (default: qwen2.5-coder:7b)
+    -h, --help          Show this help
+
+Supported formats:
+    Any text-based file (text, markdown, source code, json, yaml, xml, etc.),
+    pdf (requires pdftotext), docx (requires unzip).
+    Media (image/audio/video) and other binary files are rejected.
+
+Dependencies:
+    - Ollama running locally (reachable at AI_API_URL)
+    - pdftotext (pdf input), unzip (docx input) — optional, per format
+
+Environment (defaults live in vars/common.env, auto-exported by the shell):
+    AI_DEFAULT_SMALL_MODEL   Override default model
+    AI_API_URL               Override Ollama endpoint
+    DOTFILES                 Repo root; locates docs/FILE_NAMING_CONVENTION.md
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# config
+# ---------------------------------------------------------------------------
+
+_DEFAULT_MODEL = os.environ.get("AI_DEFAULT_SMALL_MODEL", "qwen2.5-coder:7b")
+_DEFAULT_API_URL = os.environ.get("AI_API_URL", "http://localhost:11434/api/generate")
+_DOTFILES = Path(os.environ.get("DOTFILES", Path.home() / "dotfiles"))
+_CONVENTION_PATH = _DOTFILES / "docs" / "FILE_NAMING_CONVENTION.md"
+
+_MEDIA_MIME_PREFIXES = ("image/", "audio/", "video/")
+
+# ---------------------------------------------------------------------------
+# spinner
+# ---------------------------------------------------------------------------
+
+class Spinner:
+    _FRAMES = "|/-\\"
+
+    def __init__(self, message: str = "Working..."):
+        self._message = message
+        self._stop_event = threading.Event()
+        self._thread = threading.Thread(target=self._spin, daemon=True)
+
+    def _spin(self):
+        frames = list(self._FRAMES)
+        i = 0
+        while not self._stop_event.is_set():
+            print(f"\r{frames[i % len(frames)]} {self._message}", end="", flush=True)
+            time.sleep(0.08)
+            i += 1
+
+    def __enter__(self):
+        self._thread.start()
+        return self
+
+    def __exit__(self, *_):
+        self._stop_event.set()
+        self._thread.join()
+        print("\r" + " " * (len(self._message) + 4) + "\r", end="", flush=True)
+
+# ---------------------------------------------------------------------------
+# dependency check
+# ---------------------------------------------------------------------------
+
+def check_deps(convention_path: Path) -> None:
+    """Raise SystemExit if the naming-convention file is missing.
+
+    HTTP and JSON are handled by the Python standard library (urllib/json),
+    so no external tools are required here. Format-specific helpers
+    (pdftotext, unzip) are checked lazily at the point of use.
+    """
+    if not convention_path.is_file():
+        print(f"error: convention file not found: {convention_path}", file=sys.stderr)
+        sys.exit(1)
+
+# ---------------------------------------------------------------------------
+# content reader
+# ---------------------------------------------------------------------------
+
+def _detect_mime(path: Path) -> str:
+    # python-magic not required; use subprocess `file` which is always present on macOS
+    result = subprocess.run(
+        ["file", "--mime-type", "-b", str(path)],
+        capture_output=True, text=True
+    )
+    return result.stdout.strip()
+
+
+def _looks_like_text(path: Path, sample_size: int = 8192) -> bool:
+    """Heuristic: text if a leading sample has no NUL bytes and decodes as UTF-8."""
+    with path.open("rb") as f:
+        chunk = f.read(sample_size)
+    if b"\x00" in chunk:
+        return False
+    try:
+        chunk.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
+
+
+def read_content(path: Path, max_lines: int = 200, max_chars: int = 3000) -> str:
+    """
+    Extract text from path. PDF and docx are extracted via helper tools;
+    everything else is read as text if it is not media and decodes as UTF-8.
+    Raises SystemExit for media/binary types or missing helper tools.
+    """
+    mime = _detect_mime(path)
+
+    if mime == "application/pdf":
+        if not shutil.which("pdftotext"):
+            sys.exit("error: pdftotext not found — install poppler (brew install poppler)")
+        result = subprocess.run(
+            ["pdftotext", str(path), "-"],
+            capture_output=True, text=True
+        )
+        return "\n".join(result.stdout.splitlines()[:max_lines])
+
+    docx_mimes = {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/zip",
+    }
+    if mime in docx_mimes:
+        if not shutil.which("unzip"):
+            sys.exit("error: unzip not found")
+        result = subprocess.run(
+            ["unzip", "-p", str(path), "word/document.xml"],
+            capture_output=True, text=True
+        )
+        text = re.sub(r"<[^>]*>", "", result.stdout)
+        text = re.sub(r"[ \n]+", " ", text)
+        return text[:max_chars]
+
+    if mime.startswith(_MEDIA_MIME_PREFIXES):
+        sys.exit(f"error: unsupported file type: {mime}")
+
+    if mime.startswith("text/") or _looks_like_text(path):
+        lines = path.read_text(errors="replace").splitlines()
+        return "\n".join(lines[:max_lines])
+
+    sys.exit(f"error: unsupported file type: {mime}")
+
+# ---------------------------------------------------------------------------
+# name sanitizer
+# ---------------------------------------------------------------------------
+
+def sanitize(name: str) -> str:
+    """Lowercase snake_case: strip whitespace, replace non-alphanumeric with _, collapse."""
+    name = name.strip().lower()
+    name = re.sub(r"[^a-z0-9_]", "_", name)
+    name = re.sub(r"_+", "_", name)
+    return name.strip("_")
+
+# ---------------------------------------------------------------------------
+# API call
+# ---------------------------------------------------------------------------
+
+def request_name(
+    content: str,
+    ext: str,
+    model: str,
+    api_url: str,
+    convention_path: Path,
+) -> str:
+    """
+    Send content to Ollama and return a sanitized filename stem.
+    Raises SystemExit on any error.
+    """
+    convention = convention_path.read_text()
+
+    payload = json.dumps({
+        "model": model,
+        "system": (
+            "You are a file naming assistant. "
+            "Follow this naming convention strictly:\n\n"
+            + convention
+        ),
+        "prompt": (
+            "Based on the file content below, suggest a filename.\n"
+            f"File extension: {ext}\n"
+            "Output ONLY the filename without extension, nothing else.\n\n"
+            f"Content:\n{content}\n"
+            "/no_think"
+        ),
+        "stream": False,
+        "think": False,
+        "options": {"temperature": 0, "num_predict": 30, "num_ctx": 8192},
+    }).encode()
+
+    req = urllib.request.Request(
+        api_url,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            body = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        sys.exit(f"error: HTTP {e.code} from model endpoint")
+    except Exception as e:
+        sys.exit(f"error: request to {api_url} failed: {e}")
+
+    if "error" in body:
+        sys.exit(f"error: model: {body['error']}")
+
+    raw = body.get("response", "").strip()
+    if not raw:
+        sys.exit("error: empty response from model")
+
+    result = sanitize(raw)
+    if not result:
+        sys.exit("error: model returned an unusable name")
+
+    return result
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog="ai_rename",
+        description="Rename a file based on its content via local Ollama model.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("file", help="File to rename")
+    parser.add_argument("-n", "--dry-run", action="store_true",
+                        help="Preview new name without renaming")
+    parser.add_argument("-m", "--model", default=_DEFAULT_MODEL,
+                        help=f"Ollama model (default: {_DEFAULT_MODEL})")
+    args = parser.parse_args()
+
+    path = Path(args.file)
+    if not path.is_file():
+        sys.exit(f"error: file not found: {path}")
+
+    check_deps(_CONVENTION_PATH)
+
+    ext = path.suffix.lstrip(".")  # "pdf", "txt", "" if no extension
+
+    content = read_content(path)
+
+    with Spinner("Generating filename..."):
+        new_stem = request_name(
+            content=content,
+            ext=ext,
+            model=args.model,
+            api_url=_DEFAULT_API_URL,
+            convention_path=_CONVENTION_PATH,
+        )
+
+    new_path = path.with_name(f"{new_stem}.{ext}" if ext else new_stem)
+    print(f"{path.name}  ->  {new_path.name}")
+
+    if args.dry_run:
+        print("(dry-run, no changes made)")
+        return
+
+    if new_path.exists():
+        sys.exit(f"error: target already exists: {new_path}")
+
+    path.rename(new_path)
+
+
+if __name__ == "__main__":
+    main()

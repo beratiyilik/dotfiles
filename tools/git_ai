@@ -1,0 +1,449 @@
+#!/usr/bin/env python3
+"""git_ai — AI-assisted git commits, branch names, and interactive rebase.
+
+Usage:
+    git_ai commit                 # commit message for staged changes (alias: ai_commit)
+    git_ai branch                 # branch-name suggestion for the working tree (ai_branch)
+    git_ai rebase [<rebase-args>] # interactive rebase with AI squash messages (ai_rebase)
+
+The model runs locally via Ollama. The convention file at
+$DOTFILES/docs/GIT_COMMIT_MESSAGE_CONVENTION.md drives commit-message style.
+
+Dependencies:
+    - git
+    - Ollama running locally (reachable at AI_API_URL)
+
+Environment (defaults live in vars/common.env, auto-exported by the shell):
+    AI_DEFAULT_SMALL_MODEL   Ollama model       (default: qwen2.5-coder:7b)
+    AI_API_URL               Ollama endpoint    (default: http://localhost:11434/api/generate)
+    DOTFILES                 Repo root; locates the commit-convention file
+    EDITOR                   Editor for commit/rebase review (default: vi / nano)
+
+Internal subcommands (invoked by git as GIT_EDITOR / GIT_SEQUENCE_EDITOR during
+rebase; not meant to be run by hand): squash-editor, seq-editor.
+"""
+
+from __future__ import annotations
+
+import argparse
+import fnmatch
+import json
+import os
+import re
+import shlex
+import subprocess
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# config
+# ---------------------------------------------------------------------------
+
+MODEL = os.environ.get("AI_DEFAULT_SMALL_MODEL", "qwen2.5-coder:7b")
+API_URL = os.environ.get("AI_API_URL", "http://localhost:11434/api/generate")
+DOTFILES = Path(os.environ.get("DOTFILES", Path.home() / "dotfiles"))
+CONVENTION_PATH = DOTFILES / "docs" / "GIT_COMMIT_MESSAGE_CONVENTION.md"
+
+_MAX_DIFF_BYTES = 24000
+_EXCLUDES = (":(exclude)*.lock", ":(exclude)*-lock.*", ":(exclude)*.min.*")
+
+# ---------------------------------------------------------------------------
+# output (colour only on a TTY, never when NO_COLOR is set)
+# ---------------------------------------------------------------------------
+
+_COLOR = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
+
+
+def _c(code: str) -> str:
+    return code if _COLOR else ""
+
+
+_RESET, _BOLD = _c("\033[0m"), _c("\033[1m")
+_CYAN, _GREEN = _c("\033[38;5;66m"), _c("\033[38;5;76m")
+_RED = _c("\033[38;5;196m")
+
+
+def err(msg: str) -> None:
+    print(f"{_RED}error:{_RESET} {msg}", file=sys.stderr)
+
+
+def die(msg: str, code: int = 1) -> "NoReturn":  # type: ignore[name-defined]
+    err(msg)
+    raise SystemExit(code)
+
+
+class OllamaError(RuntimeError):
+    """Raised when the model request fails; callers decide whether to abort."""
+
+
+class Spinner:
+    _FRAMES = "|/-\\"
+
+    def __init__(self, message: str):
+        self._message = message
+        self._enabled = sys.stderr.isatty()
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._spin, daemon=True)
+
+    def _spin(self) -> None:
+        i = 0
+        while not self._stop.is_set():
+            print(f"\r{self._FRAMES[i % len(self._FRAMES)]} {self._message}",
+                  end="", file=sys.stderr, flush=True)
+            time.sleep(0.08)
+            i += 1
+
+    def __enter__(self):
+        if self._enabled:
+            self._thread.start()
+        return self
+
+    def __exit__(self, *_):
+        if self._enabled:
+            self._stop.set()
+            self._thread.join()
+            print("\r" + " " * (len(self._message) + 4) + "\r",
+                  end="", file=sys.stderr, flush=True)
+
+# ---------------------------------------------------------------------------
+# git helpers
+# ---------------------------------------------------------------------------
+
+def _git(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", *args], capture_output=True, text=True)
+
+
+def git_out(*args: str) -> str:
+    return _git(*args).stdout
+
+
+def in_repo() -> bool:
+    return _git("rev-parse", "--is-inside-work-tree").returncode == 0
+
+
+def has_staged() -> bool:
+    # `git diff --cached --quiet` exits non-zero when there ARE staged changes.
+    return _git("diff", "--cached", "--quiet").returncode != 0
+
+# ---------------------------------------------------------------------------
+# convention + diff builders
+# ---------------------------------------------------------------------------
+
+def load_convention(path: Path) -> str:
+    out: list[str] = []
+    for line in path.read_text().splitlines():
+        if line.startswith("## Decision Flow"):
+            break
+        out.append(line)
+    return "\n".join(out)
+
+
+def build_diff(max_bytes: int = _MAX_DIFF_BYTES) -> str:
+    stat = git_out("diff", "--cached", "--stat")
+    body = git_out("diff", "--cached", "--", ".", *_EXCLUDES)
+    body = body.encode()[:max_bytes].decode(errors="replace")
+    return f"{stat}\n{body}"
+
+
+def _is_excluded(name: str) -> bool:
+    return (name.endswith(".lock")
+            or fnmatch.fnmatch(name, "*-lock.*")
+            or fnmatch.fnmatch(name, "*.min.*"))
+
+
+def _looks_binary(path: Path) -> bool:
+    try:
+        return b"\x00" in path.read_bytes()[:8000]
+    except OSError:
+        return True
+
+
+def build_workdiff(max_bytes: int = _MAX_DIFF_BYTES) -> str:
+    stat = git_out("diff", "--stat")
+    unstaged = git_out("diff", "--", ".", *_EXCLUDES)
+
+    chunks: list[str] = []
+    for f in git_out("ls-files", "--others", "--exclude-standard").splitlines():
+        if not f or _is_excluded(f):
+            continue
+        p = Path(f)
+        if _looks_binary(p):
+            chunks.append(f"\n--- new file (binary, skipped): {f} ---")
+            continue
+        head = p.read_text(errors="replace")[:2000]
+        chunks.append(f"\n--- new file: {f} ---\n{head}\n")
+
+    body = (f"{stat}\n\n--- untracked files ---\n{''.join(chunks)}\n"
+            f"--- unstaged diff ---\n{unstaged}")
+
+    if len(body.encode()) > max_bytes:
+        clipped = body.encode()[:max_bytes].decode(errors="replace").splitlines()
+        last = max((i for i, ln in enumerate(clipped)
+                    if ln.startswith("diff --git")), default=len(clipped) - 1)
+        body = "\n".join(clipped[:last if last > 0 else len(clipped)])
+        body += "\n\n[... truncated to fit context window ...]"
+    return body
+
+# ---------------------------------------------------------------------------
+# model request + response cleanup
+# ---------------------------------------------------------------------------
+
+def ollama_request(system: str, prompt: str,
+                   num_predict: int = 300, num_ctx: int = 32768) -> str:
+    payload = json.dumps({
+        "model": MODEL,
+        "system": system,
+        "prompt": prompt,
+        "stream": False,
+        "options": {"temperature": 0, "num_predict": num_predict, "num_ctx": num_ctx},
+    }).encode()
+    req = urllib.request.Request(
+        API_URL, data=payload,
+        headers={"Content-Type": "application/json"}, method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            body = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        raise OllamaError(f"HTTP {e.code} from model endpoint")
+    except Exception as e:
+        raise OllamaError(f"request to {API_URL} failed: {e}")
+
+    if "error" in body:
+        raise OllamaError(f"model: {body['error']}")
+    text = body.get("response", "").strip()
+    if not text:
+        raise OllamaError("empty response from model")
+    return text
+
+
+def clean_msg(text: str) -> str:
+    """Strip markdown fences, language tags, and preamble the model may emit."""
+    out: list[str] = []
+    for idx, line in enumerate(text.split("\n")):
+        if re.match(r"^\s*```[\w+.-]*\s*$", line):
+            continue
+        line = line.replace("```", "")
+        if idx == 0:
+            line = re.sub(
+                r"^\s*(plaintext|text|txt|markdown|md|bash|sh|shell|console)(\s+|$)",
+                "", line)
+        if re.match(r"^[Hh]ere.s .*commit message", line):
+            continue
+        out.append(line)
+    while out and not out[0].strip():
+        out.pop(0)
+    while out and not out[-1].strip():
+        out.pop()
+    return "\n".join(out)
+
+# ---------------------------------------------------------------------------
+# commit  (ai_commit)
+# ---------------------------------------------------------------------------
+
+_COMMIT_SUFFIX = ("\n\nGenerate ONE commit message for the diff the user provides.\n"
+                  "Output ONLY the raw commit message text — no code blocks, no "
+                  "backticks, no markdown, no preamble or explanation.")
+
+
+def cmd_commit(a: argparse.Namespace) -> None:
+    if not in_repo():
+        die("not a git repository.")
+    if not has_staged():
+        die("no staged changes to commit.")
+    if not CONVENTION_PATH.is_file():
+        die(f"convention file not found: {CONVENTION_PATH}")
+
+    convention = load_convention(CONVENTION_PATH)
+    diff = build_diff()
+    system = (f"You are a git commit message generator. Follow this convention:\n\n"
+              f"{convention}{_COMMIT_SUFFIX}")
+
+    try:
+        with Spinner("Generating commit message..."):
+            msg = ollama_request(system, f"Diff:\n{diff}")
+    except OllamaError as e:
+        die(str(e))
+
+    msg = clean_msg(msg)
+    if not msg or msg == "null":
+        die("empty response from model.")
+
+    raise SystemExit(subprocess.run(["git", "commit", "-e", "-m", msg]).returncode)
+
+# ---------------------------------------------------------------------------
+# branch  (ai_branch)
+# ---------------------------------------------------------------------------
+
+_BRANCH_SYSTEM = """You are a git branch name generator.
+
+Valid types: feat, fix, refactor, perf, style, test, docs, build, ops, chore, revert.
+
+STRICT OUTPUT FORMAT: <type>/<short-kebab-case-description>
+Examples of valid output:
+feat/add-tmux-config
+fix/handle-null-input
+refactor/extract-token-reader
+
+Rules:
+- lowercase only
+- words separated by hyphens
+- no colons, no scopes, no spaces, no parentheses, no slashes other than the one after <type>
+- description max 4-5 words
+
+Based on the diff the user provides, suggest ONE branch name in this exact format.
+Output ONLY the branch name — no explanation, no quotes, no backticks, no markdown."""
+
+
+def cmd_branch(a: argparse.Namespace) -> None:
+    if not in_repo():
+        die("not a git repository.")
+    diff = build_workdiff()
+    if not diff.strip():
+        die("no changes found in working tree.")
+
+    try:
+        with Spinner("Suggesting branch name..."):
+            name = ollama_request(_BRANCH_SYSTEM, f"Diff:\n{diff}")
+    except OllamaError as e:
+        die(str(e))
+
+    name = clean_msg(name)
+    if not name or name == "null":
+        die("empty response from model.")
+    print(f"Suggested branch name: {_BOLD}{_GREEN}{name}{_RESET}")
+
+# ---------------------------------------------------------------------------
+# rebase  (ai_rebase) + editor subcommands invoked by git
+# ---------------------------------------------------------------------------
+
+def _open_editor(path: str, default: str) -> "NoReturn":  # type: ignore[name-defined]
+    editor = os.environ.get("EDITOR") or default
+    cmd = shlex.split(editor) + [path]
+    try:
+        tty = open("/dev/tty", "r+")
+    except OSError:
+        tty = None
+    try:
+        if tty:
+            rc = subprocess.run(cmd, stdin=tty, stdout=tty, stderr=tty).returncode
+        else:
+            rc = subprocess.run(cmd).returncode
+    finally:
+        if tty:
+            tty.close()
+    raise SystemExit(rc)
+
+
+def cmd_rebase(a: argparse.Namespace) -> None:
+    if not in_repo():
+        die("not a git repository.")
+    me = os.path.realpath(__file__)
+    base = f"{shlex.quote(sys.executable)} {shlex.quote(me)}"
+    env = os.environ.copy()
+    env["GIT_SEQUENCE_EDITOR"] = f"{base} seq-editor"
+    env["GIT_EDITOR"] = f"{base} squash-editor"
+    rc = subprocess.run(
+        ["git", "-c", "advice.waitingForEditor=false", "rebase", "-i", *a.args],
+        env=env,
+    ).returncode
+    raise SystemExit(rc)
+
+
+def cmd_seq_editor(a: argparse.Namespace) -> None:
+    # GIT_SEQUENCE_EDITOR: runs on the rebase todo file before the editor opens.
+    # Strip update-ref lines (avoid unintended branch pointer updates); warn on
+    # exec/reset/merge; then hand off to the user's editor.
+    path = a.file
+    lines = Path(path).read_text().splitlines()
+    kept = [ln for ln in lines if not ln.startswith("update-ref")]
+    if any(ln.startswith(("exec", "reset", "merge")) for ln in kept):
+        print("warning: todo contains exec/reset/merge lines, review carefully",
+              file=sys.stderr)
+    Path(path).write_text("\n".join(kept) + ("\n" if kept else ""))
+    _open_editor(path, default="nano")
+
+
+def cmd_squash_editor(a: argparse.Namespace) -> None:
+    # GIT_EDITOR during rebase. Two phases:
+    #   1. the rebase todo file (defensive — normally seq-editor handles it)
+    #   2. a squash commit message file: summarise the messages via the model.
+    path = a.file
+    if "rebase-merge/git-rebase-todo" in path or "rebase-todo" in path:
+        _open_editor(path, default="nano")
+
+    content = Path(path).read_text()
+    existing = "\n".join(
+        ln for ln in content.splitlines()
+        if ln.strip() and not ln.lstrip().startswith("#")
+    )
+    if not existing.strip():
+        _open_editor(path, default="vi")
+
+    convention = load_convention(CONVENTION_PATH) if CONVENTION_PATH.is_file() else ""
+    system = (
+        "You are a git commit message generator. Follow this convention:\n\n"
+        f"{convention}\n\n"
+        "Generate ONE squash commit message that summarizes all of the messages "
+        "the user provides.\nOutput ONLY the raw commit message text — no code "
+        "blocks, no backticks, no markdown, no preamble or explanation."
+    )
+    prompt = ("These are the individual commit messages being squashed:\n\n"
+              f"{existing}")
+
+    try:
+        with Spinner("Generating squash commit message..."):
+            ai_msg = clean_msg(ollama_request(system, prompt))
+    except OllamaError:
+        print("warning: model request failed — opening editor directly",
+              file=sys.stderr)
+        _open_editor(path, default="vi")
+
+    if ai_msg and ai_msg != "null":
+        Path(path).write_text(f"{ai_msg}\n\n{content}\n")
+    _open_editor(path, default="vi")
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="git_ai",
+        description="AI-assisted git commits, branch names, and interactive rebase.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("commit", help="commit message for staged changes (alias: ai_commit)"
+                   ).set_defaults(func=cmd_commit)
+    sub.add_parser("branch", help="branch-name suggestion (alias: ai_branch)"
+                   ).set_defaults(func=cmd_branch)
+
+    pr = sub.add_parser("rebase", help="interactive rebase with AI squash (alias: ai_rebase)")
+    pr.add_argument("args", nargs=argparse.REMAINDER,
+                    help="arguments passed through to `git rebase -i`")
+    pr.set_defaults(func=cmd_rebase)
+
+    # internal: invoked by git as GIT_EDITOR / GIT_SEQUENCE_EDITOR during rebase
+    pse = sub.add_parser("squash-editor")
+    pse.add_argument("file")
+    pse.set_defaults(func=cmd_squash_editor)
+    psq = sub.add_parser("seq-editor")
+    psq.add_argument("file")
+    psq.set_defaults(func=cmd_seq_editor)
+
+    return p
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

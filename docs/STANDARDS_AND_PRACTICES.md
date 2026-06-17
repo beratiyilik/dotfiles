@@ -1,288 +1,209 @@
 # Shell Scripting Standards and Best Practices
 
-## Header Comment Template (REQUIRED)
+Three file roles exist in this repo. Pick the right one before writing anything.
+See [INTERNALS.md](INTERNALS.md) for the canonical patterns.
 
-```sh
-#!/bin/sh
-# $DOTFILES_DIR/lib/script_name.sh        # sourced libraries
-# $DOTFILES_DIR/scripts/script_name.sh    # executable scripts
-#
-# Description:
-#   Brief summary of what this script does.
-#
-# Usage:
-#   Provide basic usage instructions or examples here.
-#   For example:
-#     script_name.sh [options]
-#
-# Options:
-#   -h, --help       Describe what help or usage outputs do
-#   -v, --verbose    Describe how verbosity changes script output
-#
-# Dependencies:
-#   - List required commands or external tools (e.g., git, curl, jq).
-#   - Note if certain shells, interpreters, or libraries are expected.
-#
-# Environment Variables:
-#   - Explain any environment variables that must be set beforehand,
-#     or that this script will read/update.
-#   - For instance, MY_ENV_VAR, PATH modifications, etc.
-#
-# Required Predefined Variables:
-#   - For instance, COLOR_ERROR, COLOR_SUCCESS, etc., if you rely on
-#     external color/formatting definitions from a broader dotfiles library.
-#
-# Return Codes:
-#   0   - Success
-#   10  - Generic or usage error
-#   20  - Dependency not found
-#   ... (and so on)
-#
-# CAUTION:
-#   - List any known caveats or side effects, such as permanent file changes,
-#     network calls, or the need to source the script rather than execute it.
-#   - Include disclaimers about system or environment modifications.
+| Role | Where | Shebang | `set -e` | `DOTFILES` guard |
+| --- | --- | --- | --- | --- |
+| **Execute-only script** | `os/macos/*.sh`, `bin/dotfiles` | `#!/usr/bin/env bash` | yes | entry point — self-locates |
+| **Source-only library** | `core/*.sh`, `shell/common/*.sh` | none | inherited | `: "${DOTFILES:?}"` |
+| **Interactive-only library** | `shell/common/tool_loader.sh`, `shell/common/nvm.sh` | none | inherited | `: "${DOTFILES:?}"` |
+
+---
+
+## 1. Source-only library
+
+No shebang. Opens with idempotency guard and `DOTFILES` assertion.
+Logging via `core/utils.sh` (`log_info/ok/warn/error`). Never calls `exit`.
+
+```bash
+# shellcheck shell=bash
+# One-line description. Sourced by <caller>. Idempotent.
+[[ -n "${__DF_NAME_LOADED:-}" ]] && return 0
+readonly __DF_NAME_LOADED=1
+
+: "${DOTFILES:?DOTFILES not set — source exports.sh first}"
+source "$DOTFILES/core/utils.sh"
+
+# implementation
 ```
 
-## Complete Script Template Example
+> Interactive-only libraries follow the same pattern but are only sourced from
+> `.zshrc` / `.bashrc` — never from `exports.sh` or non-interactive paths.
+> See [INTERNALS.md](INTERNALS.md) for the tool_loader pattern.
 
-```sh
+---
+
+## 2. Execute-only script (`os/macos/*.sh` style)
+
+Has a shebang, `set -euo pipefail`, an execute-guard (refuse to be sourced),
+and a `trap`-based cleanup. Self-locates `$DOTFILES` via `LIB_DIR`.
+
+```bash
 #!/usr/bin/env bash
-# or #!/usr/bin/env zsh
-# $DOTFILES_DIR/lib/script_name.sh        # sourced libraries
-# $DOTFILES_DIR/scripts/script_name.sh    # executable scripts
+# $DOTFILES/os/macos/script_name.sh
 #
 # Description:
-#   A template script demonstrating standardized shell scripting practices.
-#   Provides structured logging, argument parsing, and file processing with
-#   emphasis on safety, portability, and maintainability.
+#   One-sentence summary.
 #
 # Usage:
-#   script_name.sh [OPTIONS] <target>
+#   script_name.sh [--dry-run] [--help]
 #
 # Options:
-#   --config=FILE      Specify configuration file to source
-#   --verbose, -v      Enable verbose logging
-#   --help, -h         Display usage information
-#
-# Examples:
-#   script_name.sh --config=myconfig.cfg data.txt
-#   script_name.sh --verbose input.csv
+#   --dry-run    Print actions without executing them
+#   --help, -h   Display usage and exit
 #
 # Dependencies:
-#   - bash (v4+ or zsh if modified), mktemp, date, etc.
-#   - Tools available by default on most Unix-like systems.
-#
-# Environment Variables:
-#   - None required by default; user may specify a custom config file
-#     via --config=FILE
+#   - List required external commands (e.g. git, curl, jq)
 #
 # Return Codes:
-#   0  - Success
-#   1  - General failure
-#   2  - Invalid arguments or missing input file
-#   (See constants in the script body for more.)
-#
-# CAUTION:
-#   - Uses 'set -euo pipefail' to exit immediately on errors or undefined variables.
-#   - Automatically removes a temporary directory upon script exit (cleanup function).
-#   - Logging is written to stderr. Adjust as necessary for your environment.
+#   0    Success
+#   20   Authentication failed (sudo)
+#   64   Invalid usage
+#   127  Command not found
 
+# must be executed directly, not sourced
+[[ "${BASH_SOURCE[0]}" != "$0" ]] && { printf "[ERROR] Do not source this script\n" >&2; exit 64; }
 
-# exit immediately if a command exits with non-zero status (-e)
 set -o errexit
-# treat unset variables as an error (-u)
 set -o nounset
-# exit if any command in a pipeline fails (-o pipefail)
 set -o pipefail
-# restrict field separators to newline and tab for safety
 IFS=$'\n\t'
 
-# constants
-readonly VERSION="1.0.0"
-readonly SCRIPT_NAME=$(basename "$0")
-readonly EXIT_SUCCESS=0
-readonly EXIT_FAILURE=1
-readonly EXIT_INVALID_ARGS=2
-readonly TEMP_DIR=$(mktemp -d "/tmp/${SCRIPT_NAME}.XXXXXX")
+LIB_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$LIB_DIR/../lib.sh"   # shared os/lib.sh: logging, dry_run_exec, confirm, sudo keep-alive
 
-# default configuration
-config_file=""
-verbose=false
-target=""
+readonly SCRIPT_NAME="$(basename "$0")"
+# EXIT_SUCCESS / EXIT_AUTH_FAILED / EXIT_INVALID_USAGE / EXIT_CMD_NOT_FOUND
+# (0 / 20 / 64 / 127) come from os/lib.sh — do not redefine them here.
 
-# cleanup function
-cleanup() {
-  local exit_code=$1
+dry_run=false
 
-  # remove temporary files
-  if [[ -d "$TEMP_DIR" ]]; then
-    rm -rf "$TEMP_DIR"
-  fi
+_TEMP_DIR="$(mktemp -d "/tmp/${SCRIPT_NAME}.XXXXXX")"
+cleanup() { rm -rf "$_TEMP_DIR"; }
+trap cleanup EXIT INT TERM
 
-  # log exit information if not successful
-  if [[ $exit_code -ne 0 ]]; then
-    log_error "Script terminated with exit code $exit_code"
-  fi
-
-  exit "$exit_code"
-}
-
-# set up trap to call cleanup on exit
-trap 'cleanup $?' EXIT INT TERM
-
-# logging functions
-log() {
-  local level="$1"
-  local message="$2"
-  local timestamp
-  timestamp=$(date +"%Y-%m-%dT%H:%M:%S")
-  printf "[%s] [%s] %s\n" "$timestamp" "$level" "$message" >&2
-}
-
-log_debug() { [[ "$verbose" == true ]] && log "DEBUG" "$1"; }
-log_info() { log "INFO" "$1"; }
-log_warn() { log "WARNING" "$1"; }
-log_error() { log "ERROR" "$1"; }
-log_success() { log "SUCCESS" "$1"; }
-
-# display help information
 show_help() {
   cat <<EOF
-Usage: $SCRIPT_NAME [OPTIONS] <target>
+Usage: $SCRIPT_NAME [--dry-run] [--help]
 
-A template script demonstrating shell scripting standards and best practices.
+Description here.
 
 Options:
-  --config=FILE     Specify configuration file
-  --verbose, -v     Enable verbose output
-  --help, -h        Display this help message and exit
-
-Examples:
-  $SCRIPT_NAME --config=myconfig.cfg data.txt
-  $SCRIPT_NAME --verbose input.csv
-
-Version: $VERSION
+  --dry-run    Print actions without executing them
+  --help, -h   Display this help message and exit
 EOF
 }
 
-# parse command line arguments
 parse_args() {
   while (( $# > 0 )); do
     case "$1" in
-      --config=*)
-        config_file="${1#*=}"
-        if [[ ! -f "$config_file" ]]; then
-          log_error "Configuration file '$config_file' not found"
-          return $EXIT_INVALID_ARGS
-        fi
-        ;;
-      --verbose|-v)
-        verbose=true
-        log_debug "Verbose mode enabled"
-        ;;
-      --help|-h)
-        show_help
-        exit $EXIT_SUCCESS
-        ;;
-      --*|-*)
-        log_error "Unknown option: $1"
-        show_help
-        return $EXIT_INVALID_ARGS
-        ;;
-      *)
-        if [[ -z "$target" ]]; then
-          target="$1"
-        else
-          log_error "Too many arguments"
-          show_help
-          return $EXIT_INVALID_ARGS
-        fi
-        ;;
+      --dry-run)   dry_run=true ;;
+      --help|-h)   show_help; exit $EXIT_SUCCESS ;;
+      *)           log_error "Unknown option: $1"; show_help; return $EXIT_INVALID_USAGE ;;
     esac
     shift
   done
-
-  # validate required arguments
-  if [[ -z "$target" ]]; then
-    log_error "Missing required target argument"
-    show_help
-    return $EXIT_INVALID_ARGS
-  fi
-
-  # validate target
-  if [[ ! -f "$target" ]]; then
-    log_error "Target file '$target' not found or not readable"
-    return $EXIT_INVALID_ARGS
-  }
-
-  return $EXIT_SUCCESS
 }
 
-# process the target file
-process_file() {
-  local file="$1"
-  local line_count=0
-  local start_time
-  local end_time
-  local duration
-
-  log_info "Processing file: $file"
-  start_time=$(date +%s)
-
-  # example processing - count lines
-  if [[ -f "$file" ]]; then
-    # efficient way to count lines without spawning a subshell
-    mapfile -t lines < "$file"
-    line_count=${#lines[@]}
-
-    log_info "File contains $line_count lines"
-
-    # example: process each line
-    for line in "${lines[@]}"; do
-      log_debug "Processing line: $line"
-      # do something with each line
-    done
-  else
-    log_error "Failed to read file: $file"
-    return $EXIT_FAILURE
-  fi
-
-  end_time=$(date +%s)
-  duration=$((end_time - start_time))
-  log_success "File processing completed in $duration seconds"
-
-  return $EXIT_SUCCESS
-}
-
-# main function
 main() {
-  log_info "Starting $SCRIPT_NAME v$VERSION"
-  log_info "Current Date and Time (UTC): $(date -u +"%Y-%m-%d %H:%M:%S")"
-
-  # parse and process arguments
   parse_args "$@" || return $?
-
-  # load configuration if specified
-  if [[ -n "$config_file" ]]; then
-    log_info "Loading configuration from: $config_file"
-    # shellcheck source=/dev/null
-    source "$config_file" || {
-      log_error "Failed to load configuration"
-      return $EXIT_FAILURE
-    }
-  fi
-
-  # process target file
-  process_file "$target" || return $?
-
-  log_success "$SCRIPT_NAME completed successfully"
-  return $EXIT_SUCCESS
+  log_info "Starting $SCRIPT_NAME"
+  # implementation
+  log_success "$SCRIPT_NAME completed"
 }
 
-# execute main function with all arguments
 main "$@"
-
-# exit with the status of the main function
 exit $?
 ```
+
+---
+
+## 3. Naming & style
+
+- **Functions:** `snake_case`; `cmd_<name>` for CLI handlers; `_leading_underscore` for internals.
+- **Variables:** `UPPER_SNAKE` for env/globals; `local lower` inside functions.
+- **Logging:** always via `log_info/ok/warn/error` (from `core/utils.sh`); never raw `echo`.
+- **Comments:** English only. Write the *why*, not the *what*. See [§4](#4-comment--header-conventions).
+- **Guards:** source-only libraries always open with the `__DF_<NAME>_LOADED` guard. Idempotency is non-negotiable.
+- **`return` vs `exit`:** sourced libraries use `return` for early-out; execute-only scripts use `exit`.
+- **Syntax check before merging:** `bash -n <file>` / `zsh -n <file>` / `shellcheck <file>`, then `dotfiles doctor`.
+
+---
+
+## 4. Comment & header conventions
+
+Comments fall into four kinds. The weight of a comment scales with the file's
+role — a sourced helper gets one line; an executable entry point gets a full
+header. Pick the kind, then follow its rule.
+
+### 4.1 File header (top-of-file block)
+
+Drive the header off the file role (§ table above), not personal taste.
+
+| Role | Header |
+| --- | --- |
+| **Source-only library** | No banner. 1–2 comment lines (description + how it's sourced), then the guard. The minimal form from §1 — see `core/utils.sh`, `core/doctor.sh`. |
+| **Interactive library** with required env/deps | Banner allowed when it documents `ENVIRONMENT` / `DEPENDENCIES` the caller must satisfy — see `shell/common/functions.sh`. Keep it; don't add one just for decoration. |
+| **Execute-only script** | Full banner + usage block (§4.3). `os/*/*.sh`, `install.sh`, `bin/dotfiles`. |
+| **Python module** | Module docstring under the shebang — every `core/py/*.py` and `tools/*` gets one, no exceptions. PEP 257 form: a one-line summary on the opening `"""` line ending in a period; an executable tool may then add a blank line and a `Usage`/`Options` body. Never open with a bare `"""` followed by the summary on the next line. |
+
+**One banner style only.** Use the 78-column equals rule. Never `#####`, and
+never mix two banner styles in the same file:
+
+```bash
+# =============================================================================
+# name.sh — one-line summary (em-dash separator)
+#
+# ... body ...
+# =============================================================================
+```
+
+### 4.2 Block comments (a paragraph above a code section)
+
+Reserve these for a section that genuinely needs context (a tricky algorithm, a
+platform quirk, a non-obvious ordering constraint). Explain the *why*. Do not
+narrate sequential steps the code already shows. If a block is only restating
+the next three lines, delete it.
+
+Section dividers inside a file, when used, follow the header style:
+`# --------------------------------------------------------- short label`.
+Don't introduce a third divider character.
+
+### 4.3 Usage block (executable scripts & CLI tools)
+
+One template, fixed heading order. Skip a heading that doesn't apply; never
+reorder the ones that do:
+
+```text
+Description → Usage → Sections → Options → Dependencies → Environment → Return Codes
+```
+
+`os/*/*.sh` and `tools/*` must converge on this skeleton. Notes:
+
+- **Sections** is the slot for domain-specific selectors; a script that selects
+  *what to act on* rather than *areas* may title it **Targets** instead (e.g.
+  `os/macos/cleanup.sh`). Domain selectors come before the generic **Options**.
+- **Return Codes** list the codes the script can actually return. Execute-only
+  scripts inherit them from `os/lib.sh`: `0` success, `20` auth failed, `64`
+  invalid usage, `127` command not found.
+- The runtime `--help` output (`show_help`) should mirror the header — same
+  options, same wording.
+
+### 4.4 Inline comments (trailing or above a single line)
+
+- Write the *why*, not the *what*. Bad: `# loop over files`. Good: `# BSD stat
+  has no -c; fall back per platform`.
+- Trailing inline comments are separated by two spaces and may be aligned within
+  a block: `source "$DOTFILES/core/utils.sh"   # idempotent (self-guarded)`.
+- One short line. If it needs a paragraph, it's a block comment (§4.2).
+
+### 4.5 Cross-cutting rules
+
+- **English only**, across every comment kind.
+- **Em-dash `—`** is the separator in `name — description` headers (not `-`).
+- **Shebangs:** `#!/usr/bin/env bash` for bash, `#!/usr/bin/env python3` for
+  Python. No `#!/bin/bash`.
+- A comment that documents structure already covered by [INTERNALS.md](INTERNALS.md)
+  should link to it rather than restate it.

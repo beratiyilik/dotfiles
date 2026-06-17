@@ -1,0 +1,47 @@
+# source (dotfiles/ relative) → target (absolute)
+
+# shell: bash
+shell/bash/.bash_profile          → ~/.bash_profile
+shell/bash/.bashrc                → ~/.bashrc
+shell/bash/.bash_logout           → ~/.bash_logout
+
+# shell: zsh
+shell/zsh/.zshenv                 → ~/.zshenv
+shell/zsh/.zprofile               → ~/.zprofile
+shell/zsh/.zshrc                  → ~/.zshrc
+shell/zsh/.zlogout                → ~/.zlogout
+
+# shell: plugins / themes
+config/p10k/.p10k.zsh             → ~/.p10k.zsh
+config/bashify/bashifyrc          → ~/.config/bashify/bashifyrc
+
+# editor
+config/vim/.vimrc                 → ~/.vimrc
+config/nano/.nanorc               → ~/.nanorc
+config/editorconfig/.editorconfig → ~/.editorconfig
+
+# terminal
+config/readline/.inputrc          → ~/.inputrc
+config/tmux/.tmux.conf            → ~/.tmux.conf
+config/warp/settings.toml         → ~/.warp/settings.toml
+
+# git
+config/git/.gitconfig             → ~/.gitconfig
+config/git/.gitignore_global      → ~/.gitignore_global
+config/git/.gitmessage            → ~/.gitmessage
+
+# ssh / auth
+config/ssh/config                 → ~/.ssh/config
+config/1Password/agent.toml       → ~/.config/1Password/ssh/agent.toml
+
+# cloud / cli
+config/aws/config                 → ~/.aws/config
+config/gh/config.yml              → ~/.config/gh/config.yml
+config/npm/.npmrc                 → ~/.npmrc
+
+# apps / tools
+
+# optional — uncomment if needed:
+# config/starship/starship.toml   → ~/.config/starship.toml
+# shell/bash/.profile             → ~/.profile
+# shell/zsh/.zlogin               → ~/.zlogin

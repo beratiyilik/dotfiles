@@ -1,0 +1,56 @@
+[appearance]                            # general visual settings
+spacing = "compact"                     # compact reduces padding/whitespace in ui
+
+[appearance.vertical_tabs]              # vertical tab orientation
+enabled = false                         # disable vertical tab layout
+
+[appearance.themes]                     # color scheme configuration
+system_theme = true                     # follow os light/dark mode
+selected_system_themes = { dark = "solarized_dark", light = "gruvbox_light" }
+
+[appearance.text]                       # font settings
+notebook_font_size = 14.0               # font size for notebook view
+font_size = 13.0                        # default ui font size
+
+[appearance.blocks]                     # output block display options
+show_block_dividers = false             # hide divider lines between blocks
+show_jump_to_bottom_of_block_button = true # show button to jump to bottom of a block
+
+[code]                                  # code editor behavior
+[code.editor]                           # editor-specific ui toggles
+show_code_review_button = false         # hide inline code review button
+show_project_explorer = false           # hide file tree sidebar
+show_global_search = false              # hide global search panel
+
+[warp_drive]                            # cloud sync / shared config feature
+enabled = false                         # disable warp drive
+
+[agents]                                # ai agent configuration
+[agents.third_party]                    # external cli agent settings
+should_render_cli_agent_toolbar = true  # show toolbar when a cli agent is running
+
+[agents.warp_agent]                     # built-in warp ai settings
+is_any_ai_enabled = false               # master switch for all ai features
+
+[agents.warp_agent.other]               # misc warp agent options
+show_agent_notifications = false        # suppress agent desktop notifications
+
+[terminal]                              # terminal emulator settings
+[terminal.input]                        # how terminal input is handled
+alias_expansion_enabled = true          # expand shell aliases as you type
+input_box_type_setting = "universal"    # use universal input box mode
+honor_ps1 = false                       # ignore custom ps1 prompt from shell config
+
+[privacy]                               # data collection preferences
+telemetry_enabled = false               # opt out of usage analytics
+crash_reporting_enabled = false         # opt out of automatic crash reports
+
+[notifications]                         # alert and sound settings
+[notifications.preferences]             # notification behavior config
+is_agent_task_completed_enabled = true  # notify when an agent task finishes
+is_long_running_enabled = true          # notify when a command runs too long
+is_needs_attention_enabled = true       # notify when terminal needs attention
+is_password_prompt_enabled = true       # notify on password prompt
+long_running_threshold = 30             # seconds before a command is "long running"
+mode = "dismissed"                      # default notification display mode
+play_notification_sound = true          # play sound with notifications

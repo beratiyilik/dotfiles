@@ -26,16 +26,22 @@ brew "exiftool"
 brew "eza"
 # Simple, fast and user-friendly alternative to find
 brew "fd"
+# Play, record, convert, and stream select audio and video codecs
+brew "ffmpeg"
 # Command-line fuzzy finder written in Go
 brew "fzf"
 # GNU compiler collection
 brew "gcc"
 # GitHub command-line tool
 brew "gh"
+# Interpreter for PostScript and PDF
+brew "ghostscript"
 # Distributed revision control system
 brew "git"
 # Enable transparent encryption/decryption of files in a git repo
 brew "git-crypt"
+# GNU Privacy Guard (OpenPGP)
+brew "gnupg"
 # Terminal based graphical activity monitor inspired by gtop and vtop
 brew "gotop"
 # Tools and libraries to manipulate images in select formats
@@ -68,18 +74,24 @@ brew "poppler"
 brew "pre-commit"
 # Python version management
 brew "pyenv"
+# Tools for and transforming and inspecting PDF files
+brew "qpdf"
 # Ruby version manager
 brew "rbenv"
 # Search tool like grep and The Silver Searcher
 brew "ripgrep"
 # Utility that provides fast incremental file transfer
 brew "rsync"
+# 7-Zip is a file archiver with a high compression ratio
+brew "sevenzip"
 # Static analysis and lint tool, for (ba)sh scripts
 brew "shellcheck"
 # Autoformat shell script source code
 brew "shfmt"
 # Editor of encrypted files
 brew "sops"
+# SOund eXchange: universal sound sample translator
+brew "sox"
 # Very fast implementation of tldr in Rust
 brew "tealdeer"
 # Terminal multiplexer
@@ -88,6 +100,10 @@ brew "tmux"
 brew "unar"
 # Extraction utility for .zip compressed archives
 brew "unzip"
+# Executes a program periodically, showing output fullscreen
+brew "watch"
+# Port of OpenAI's Whisper model in C/C++
+brew "whisper-cpp"
 # Network analyzer and capture tool - without graphical user interface
 brew "wireshark"
 # Shell extension to navigate your filesystem faster
@@ -133,6 +149,8 @@ cask "telegram"
 cask "visual-studio-code"
 # Multimedia player
 cask "vlc"
+# Rust-based terminal
+cask "warp"
 # Native desktop client for WhatsApp
 cask "whatsapp"
 # Video communication and virtual meeting platform

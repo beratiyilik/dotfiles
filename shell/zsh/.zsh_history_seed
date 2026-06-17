@@ -182,3 +182,5 @@
 : 181:0;rsync -avz --dry-run src/ dest/ #preview sync before running
 : 182:0;tgz archived_$(tspid) file1.txt file2.txt dir1 #archive with timestamped name via custom function
 : 183:0;gotop -p -s -r 2s -c monokai
+: 184:0;exec /opt/homebrew/bin/bash --login
+: 185:0;exec /bin/zsh --login

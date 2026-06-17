@@ -1,18 +1,38 @@
-# macOS
+# os / editor
 .DS_Store
 .AppleDouble
 .LSOverride
+._*
 .Spotlight-V100
 .Trashes
-Icon
-._*
-
-# Windows
 Thumbs.db
 ehthumbs.db
 Desktop.ini
-
-# Editor temporary files
+Icon
+*~
+.directory
+.Trash-*
 *.swp
 *.swo
-*~
+
+# ide and ai tooling
+.idea/
+.vscode/
+*.sublime-workspace
+.claude/
+
+# environment and credentials
+.env.local
+vars/local.env
+
+# python
+__pycache__/
+*.pyc
+
+# build, logs, and temp
+*.log
+*.tmp
+
+# infrastructure and backups
+backups/
+*.bak

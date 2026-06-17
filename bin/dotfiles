@@ -1,0 +1,191 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# DOTFILES is honored if already set in the environment; otherwise it is derived
+# from this script's real location (symlink resolution included). This keeps things
+# working even when the repo is cloned somewhere other than $HOME/dotfiles.
+# canonical bash self-location snippet (mirrored in shell/bash/.bashrc with a
+# different ".." depth); see docs/INTERNALS.md.
+if [[ -z "${DOTFILES:-}" ]]; then
+    __self="${BASH_SOURCE[0]}"
+    while [[ -L "$__self" ]]; do
+        __dir="$(cd -P "$(dirname "$__self")" && pwd)"
+        __self="$(readlink "$__self")"
+        [[ "$__self" != /* ]] && __self="$__dir/$__self"
+    done
+    DOTFILES="$(cd -P "$(dirname "$__self")/.." && pwd)"
+    unset __self __dir
+fi
+export DOTFILES   # so subprocesses (python) and sourced scripts can see it
+
+source "$DOTFILES/core/detect.sh"
+source "$DOTFILES/core/utils.sh"
+
+# Detected once here and exported; sourced libs (e.g. symlinks.sh) and Python
+# subprocesses reuse it instead of re-detecting. See docs/INTERNALS.md.
+PYTHON="$(detect_python)"; export PYTHON
+OS="$(detect_os)"
+SHELL_NAME="$(detect_shell)"
+
+# Human-friendly OS label for usage output.
+case "$OS" in macos) OS_LABEL="macOS" ;; linux) OS_LABEL="Linux" ;; *) OS_LABEL="$OS" ;; esac
+
+usage() {
+    cat <<EOF
+dotfiles — dotfiles manager
+alias: dotf
+
+commands:
+  init          set up symlinks, run OS setup
+  link          update symlinks only
+  update        git pull + link
+  doctor        environment + symlink + tooling health check
+  os            OS-specific setup (brew, apt)
+  os --diff     show installed vs. manifest difference
+  backup        back up existing configs
+  help          this message
+
+maintenance (run \`<cmd> --help\` for options):
+  upgrade       update system packages
+  cleanup       remove caches/trash/logs/temp files
+  snapshot      dump a full environment inventory to backups/
+  defaults      apply OS system preferences
+
+detected OS: ${OS_LABEL}
+EOF
+}
+
+cmd_link() {
+    source "$DOTFILES/core/symlinks.sh"
+    link_all
+}
+
+cmd_init() {
+    log_info "OS: $OS | Shell: $SHELL_NAME"
+
+    [[ -f "$DOTFILES/hooks/pre-init.sh" ]] && source "$DOTFILES/hooks/pre-init.sh"
+
+    cmd_link
+
+    case "$OS" in
+        # defaults.sh is a standalone script (set -e, exits); run it
+        # non-interactively and keep init fault-tolerant.
+        macos) bash "$DOTFILES/os/macos/defaults.sh" --all --force || true ;;
+        linux) source "$DOTFILES/os/linux/apt.sh" ;;
+    esac
+
+    [[ -f "$DOTFILES/hooks/post-init.sh" ]] && source "$DOTFILES/hooks/post-init.sh"
+    log_ok "init complete."
+}
+
+cmd_update() {
+    log_info "git pull..."
+    git -C "$DOTFILES" pull --ff-only
+    cmd_link
+}
+
+cmd_doctor() {
+    # Prefer the richer Python implementation (consumes manifest.py and absorbs
+    # the per-target link table that used to be `dotfiles status`); fall back to
+    # the more minimal pure-bash doctor when python3 is unavailable. Either path
+    # returns non-zero on any fail → reflected in the script exit code.
+    if [[ -n "$PYTHON" ]]; then
+        PYTHONPATH="$DOTFILES/core/py" "$PYTHON" "$DOTFILES/core/py/doctor.py"
+    else
+        source "$DOTFILES/core/doctor.sh"
+        run_doctor
+    fi
+}
+
+cmd_os() {
+    local flag="${1:-}"
+    if [[ "$flag" == "--diff" ]]; then
+        [[ -z "$PYTHON" ]] && { log_error "python3 not found"; exit 1; }
+        PYTHONPATH="$DOTFILES/core/py" "$PYTHON" "$DOTFILES/core/py/packages.py" "$OS"
+        return
+    fi
+    case "$OS" in
+        macos)
+            # brew is installed by hooks/pre-init.sh during `dotfiles init`; this
+            # package-sync command assumes it exists. Mirror the --diff python guard
+            # above: fail with an actionable message instead of a raw command-not-found.
+            has_cmd brew || { log_error "Homebrew not found — run 'dotfiles init' first."; exit 1; }
+            log_info "Homebrew bundle..."
+            brew bundle --file="$DOTFILES/config/homebrew/Brewfile"
+            ;;
+        linux)
+            source "$DOTFILES/os/linux/apt.sh"
+            ;;
+    esac
+}
+
+cmd_backup() {
+    case "${1:-}" in
+        -h|--help)
+            cat <<EOF
+dotfiles backup — back up existing real config files
+
+usage: dotf backup
+
+Copies every target in .symlinks that is a real file into
+backups/backup_<timestamp>/ before it could be overwritten. Targets that are
+already symlinks (managed by this repo) or missing are skipped, so this is
+mainly useful on a fresh machine before the first \`init\`/\`link\`.
+EOF
+            return 0
+            ;;
+        "") ;;
+        *)
+            log_error "backup: unknown argument '$1' (see 'dotf backup --help')"
+            return 2
+            ;;
+    esac
+
+    source "$DOTFILES/core/backup.sh"
+    while IFS= read -r line; do
+        [[ "$line" =~ ^# ]] && continue
+        [[ -z "$line"     ]] && continue
+        target=$(echo "$line" | awk '{print $3}')
+        target="${target/#\~/$HOME}"
+        backup_file "$target"
+    done < "$DOTFILES/.symlinks"
+
+    if (( __DF_BACKUP_COUNT > 0 )); then
+        log_ok "Backup complete ($__DF_BACKUP_COUNT files): $BACKUP_DIR"
+    else
+        log_info "Nothing to back up — all targets already symlinked or missing"
+    fi
+}
+
+# OS-aware maintenance dispatch: each command maps to os/<OS>/<script>.sh
+# (standalone bash, set -e). All remaining args pass through. When the detected
+# OS has no such script yet (e.g. Linux equivalents are not written), warn and
+# return non-zero rather than running the wrong OS's script.
+cmd_os_script() {
+    local script="$1"; shift
+    local path="$DOTFILES/os/$OS/$script"
+    if [[ ! -f "$path" ]]; then
+        log_warn "'$(basename "$script" .sh)' is not available on $OS yet"
+        return 1
+    fi
+    bash "$path" "$@"
+}
+
+case "${1:-help}" in
+    init)   cmd_init ;;
+    link)   cmd_link ;;
+    update) cmd_update ;;
+    doctor) cmd_doctor ;;
+    os)     cmd_os "${2:-}" ;;
+    backup) shift; cmd_backup "$@" ;;
+    upgrade)  shift; cmd_os_script update.sh   "$@" ;;
+    cleanup)  shift; cmd_os_script cleanup.sh  "$@" ;;
+    snapshot) shift; cmd_os_script snapshot.sh "$@" ;;
+    defaults) shift; cmd_os_script defaults.sh "$@" ;;
+    help|--help|-h) usage ;;
+    *)
+        log_error "Unknown command: $1"
+        usage
+        exit 1
+        ;;
+esac

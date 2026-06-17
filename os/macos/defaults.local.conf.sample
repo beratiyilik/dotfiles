@@ -1,0 +1,18 @@
+# =============================================================================
+# defaults.local.conf — machine-specific macOS preference overrides
+#
+# Copy this file to defaults.local.conf (gitignored) to override values from
+# defaults.conf on THIS machine only. It is applied AFTER defaults.conf, so
+# rows here win on conflicting (domain, key) pairs.
+#
+# `dotfiles defaults --sync` regenerates this file automatically, capturing every
+# managed key whose current system value differs from the committed base.
+#
+# Format is identical to defaults.conf:
+#   group  domain  key  type  value
+# =============================================================================
+
+# Examples (uncomment / edit as needed):
+
+# dock          com.apple.dock           tilesize    int     64
+# screenshots   com.apple.screencapture  location    string  ~/Screenshots

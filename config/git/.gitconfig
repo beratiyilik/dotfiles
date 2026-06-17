@@ -6,6 +6,7 @@
 [core]
     editor = nano
     excludesfile = ~/.gitignore_global
+    autocrlf = input
     # fsmonitor = true
     # untrackedCache = true
 
