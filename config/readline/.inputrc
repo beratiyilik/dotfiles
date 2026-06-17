@@ -1,0 +1,70 @@
+# ~/.inputrc
+
+# ------------------------------------------------------------------------------
+# Global Settings
+# ------------------------------------------------------------------------------
+
+# By default, use Emacs-style editing (change to 'vi' for vi-style editing)
+set editing-mode emacs
+
+# Enable immediate completion if there's a single match
+set show-all-if-ambiguous on
+
+# Ignore case during completion
+set completion-ignore-case on
+
+# Use a more user-friendly menu for tab-completion
+set menu-complete-display-prefix on
+# set menu-complete-menu on
+
+# Don’t ring the bell on errors
+set bell-style none
+
+# Allow backslash to escape special characters
+set convert-meta off
+set input-meta on
+set output-meta on
+
+# Better horizontal scrolling
+set horizontal-scroll-mode on
+
+# ------------------------------------------------------------------------------
+# History Search
+#   - Press up/down arrows to search through history by prefix.
+# ------------------------------------------------------------------------------
+# Use history-search-forward/backward with Up/Down arrow keys
+"\e[A": history-search-backward
+"\e[B": history-search-forward
+
+# Alternatively, to make PageUp/PageDown do the same thing, uncomment:
+# "\e[5~": history-search-backward
+# "\e[6~": history-search-forward
+
+# ------------------------------------------------------------------------------
+# Misc Keybindings & Macros
+# ------------------------------------------------------------------------------
+
+# Ctrl+Space as a quick 'set-mark' (useful in Emacs style)
+"\C-@": set-mark
+
+# Ctrl+x, Ctrl+r to re-read this inputrc without restarting the shell
+"\C-x\C-r": " source ~/.inputrc\C-m"
+
+# Ctrl+k kills to the end of the line (built-in). If you want to kill to the beginning:
+"\C-u": unix-line-discard
+
+# Keybinding to clear the screen, similar to Ctrl+l, but we can redefine if you prefer
+"\C-l": clear-screen
+
+# Example macro: Insert a friendly message (just as a demo)
+"\C-xm": "echo 'Hello from .inputrc!'\C-m"
+
+# ------------------------------------------------------------------------------
+# End of ~/.inputrc
+# ------------------------------------------------------------------------------
+
+# (Optional) Once you've edited this file, in a Bash session you can do:
+#    bind -f ~/.inputrc
+# to reload it. For Zsh, add `bindkey -e` or `bindkey -v` in your ~/.zshrc, and ensure:
+#    export INPUTRC=~/.inputrc
+# is present so Zsh knows to read it.

@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+_dir="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
+exec "$_dir/dotfiles" init "$@"

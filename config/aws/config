@@ -1,0 +1,9 @@
+[default]
+region = eu-north-1
+output = json
+[profile beratiyilik-berat-user]
+region = us-west-1
+output = json
+[profile iradardata-berat]
+region = ca-central-1
+output = json

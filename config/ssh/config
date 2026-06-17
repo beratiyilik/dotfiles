@@ -1,0 +1,44 @@
+# ssh permission policy
+# chmod 700 ~/.ssh                         # restrict SSH config dir
+# chmod 600 ~/.ssh/my_keys/id_*            # private keys (read/write user only)
+# chmod 644 ~/.ssh/my_keys/*.pub           # public keys (readable by all)
+# chmod 600 ~/.ssh/authorized_keys         # server-side key authorization
+# chmod 644 ~/.ssh/known_hosts             # trusted host fingerprints
+
+# default settings for all hosts
+# Host *
+#     PreferredAuthentications publickey
+#     IdentitiesOnly yes
+#     AddKeysToAgent yes
+#     HostKeyAlgorithms +ssh-rsa
+#     PubkeyAcceptedAlgorithms +ssh-rsa
+
+# ssh config for vps
+# Host nebulacore
+#     HostName ssh.nebulacore.beratiyilik.com
+#     User berat
+#     IdentityFile ~/.ssh/my_keys/id_rsa_nebulacore_berat
+
+# ssh config for GitHub
+# Host github.com
+#     HostName github.com
+#     User git
+#     IdentityFile ~/.ssh/my_keys/id_rsa_github
+
+# default settings for all hosts
+Host *
+    PreferredAuthentications publickey
+    IdentitiesOnly no
+    AddKeysToAgent no
+    IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+
+# ssh config for vps
+Host nebulacore
+    HostName ssh.nebulacore.beratiyilik.com
+    User berat
+    Port 22
+
+# ssh config for GitHub
+Host github.com
+    HostName github.com
+    User git

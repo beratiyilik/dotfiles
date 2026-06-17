@@ -1,0 +1,11 @@
+[[ssh-keys]]
+item = "beratiyilik_github_ed25519"
+vault = "dev"
+
+[[ssh-keys]]
+item = "root_nebulacore_ed25519"
+vault = "dev"
+
+[[ssh-keys]]
+item = "berat_nebulacore_ed25519"
+vault = "dev"

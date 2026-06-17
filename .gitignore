@@ -1,0 +1,15 @@
+# ignore backup folder
+backups/
+
+# ignore backup files created by init.sh
+*.bak
+
+# local credential overrides (never commit)
+.dotfiles.local
+
+# ignore macos related files
+.DS_Store
+*.DS_Store
+
+# claude
+.claude/

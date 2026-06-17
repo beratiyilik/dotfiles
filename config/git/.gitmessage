@@ -1,0 +1,27 @@
+# <type>(<scope>): <description>
+#
+# ── subject ≤ 50 chars · imperative mood · no period at end ──────────────────
+#
+#
+# ── body (optional) ── wrap at 72 chars · explain what and why ───────────────
+#
+#
+# ── footer (optional) ─────────────────────────────────────────────────────────
+# Closes: #123   Refs: #456   BREAKING CHANGE: <description>
+#
+# ── types ─────────────────────────────────────────────────────────────────────
+# feat      new or changed feature
+# fix       bug fix
+# refactor  restructure without behavior change
+# perf      performance improvement (same contract)
+# style     formatting only — no behavior change
+# test      add or correct tests
+# docs      documentation only
+# build     build tools / dependencies
+# ops       infra / CI / deployment
+# chore     misc (gitignore, init, etc.)
+# revert    revert a prior commit
+#
+# ── breaking change ───────────────────────────────────────────────────────────
+# append ! after type/scope:  feat(api)!: remove endpoint
+# or footer:                  BREAKING CHANGE: description  (must be uppercase)

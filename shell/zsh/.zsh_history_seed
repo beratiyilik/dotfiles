@@ -1,0 +1,184 @@
+: 0:0;git status
+: 1:0;git status -sb
+: 2:0;git add .
+: 3:0;git add -p
+: 4:0;git commit -m "message"
+: 5:0;git commit --amend --no-edit
+: 6:0;git push
+: 7:0;git push origin dev
+: 8:0;git push -u origin HEAD
+: 9:0;git push --force-with-lease #safe force push, checks remote unchanged
+: 10:0;git pull --rebase
+: 11:0;git fetch --all --prune
+: 12:0;git checkout dev
+: 13:0;git checkout <commit/branch>
+: 14:0;git checkout -b feat/name
+: 15:0;git switch -c feat/name
+: 16:0;git rebase origin/main
+: 17:0;git rebase -i HEAD~3 #interactive rebase last 3 commits
+: 18:0;git rebase --abort #cancel rebase in progress
+: 19:0;git merge --no-ff dev
+: 20:0;git merge-base --is-ancestor dev feat/add-new-utilities && echo "mergeable" || echo "not mergeable" #check if branch fully merged
+: 21:0;git log --oneline --graph --decorate --all
+: 22:0;git log --oneline -20
+: 23:0;git log origin/main...origin/dev --oneline
+: 24:0;git diff --staged
+: 25:0;git stash
+: 26:0;git stash pop
+: 27:0;git restore --staged . #unstage all without discarding changes
+: 28:0;git reset --soft HEAD~1 #undo last commit, keep changes staged
+: 29:0;git reset --hard origin/main
+: 30:0;git branch -vv
+: 31:0;git branch -d feat/name
+: 32:0;git tag -a v0.1.0 -m "release 0.1.0"
+: 33:0;git config -l --local
+: 34:0;git config --global --list
+: 35:0;git clean -fdx #remove untracked + ignored files
+: 36:0;git push origin --delete feat/node-utils
+: 37:0;brew update
+: 38:0;brew upgrade
+: 39:0;brew install <formula>
+: 40:0;brew install --cask <app>
+: 41:0;brew uninstall <formula>
+: 42:0;brew info <formula>
+: 43:0;brew info --cask <app>
+: 44:0;brew search <term>
+: 45:0;brew list
+: 46:0;brew list --cask
+: 47:0;brew outdated
+: 48:0;brew cleanup
+: 49:0;brew doctor
+: 50:0;brew bundle dump --file=./Brewfile --force #export installed packages to Brewfile
+: 51:0;brew bundle install --file=./Brewfile --verbose
+: 52:0;brew bundle check --file=./Brewfile
+: 53:0;brew bundle cleanup --file=./Brewfile --force #remove packages not in Brewfile
+: 54:0;brew services list
+: 55:0;brew services restart ollama
+: 56:0;brew autoupdate start --upgrade --cleanup
+: 57:0;pnpm install
+: 58:0;pnpm install --force
+: 59:0;pnpm add <pkg>
+: 60:0;pnpm add -D <pkg>
+: 61:0;pnpm add -D -w @changesets/cli
+: 62:0;pnpm remove <pkg>
+: 63:0;pnpm outdated
+: 64:0;pnpm dlx npm-check-updates -u #bump deps to latest in package.json
+: 65:0;pnpm dlx npm-check-updates -u -w
+: 66:0;pnpm store prune
+: 67:0;pnpm clean:all
+: 68:0;pnpm lint
+: 69:0;pnpm typecheck
+: 70:0;pnpm build
+: 71:0;pnpm test
+: 72:0;pnpm --filter @beratiyilik/ts-utils build
+: 73:0;pnpm --filter @beratiyilik/browser-utils build
+: 74:0;pnpm --filter @beratiyilik/react-components build
+: 75:0;pnpm --filter @beratiyilik/ts-utils typecheck
+: 76:0;pnpm --filter @beratiyilik/ts-utils publish --registry http://localhost:4873/ --no-git-checks #publish to local verdaccio registry
+: 77:0;pnpm -r build
+: 78:0;pnpm -r publish --no-git-checks
+: 79:0;pnpm changeset #create changeset for versioning
+: 80:0;pnpm changeset version #apply changesets, bump versions
+: 81:0;npm i
+: 82:0;npm i -D typescript tsup
+: 83:0;npm run dev
+: 84:0;npm run build -- --watch
+: 85:0;npm test
+: 86:0;npm link <pkg>
+: 87:0;npm unlink <pkg>
+: 88:0;npm pack --dry-run
+: 89:0;npm publish --access public
+: 90:0;npm outdated
+: 91:0;docker ps -a
+: 92:0;docker images
+: 93:0;docker build -t ubuntu-dev:24.04 .
+: 94:0;docker run -it ubuntu-dev:24.04
+: 95:0;docker run -it --hostname devbox --name devbox -v "$(pwd):/workspace" ubuntu-dev:24.04 #mount cwd as workspace
+: 96:0;docker start devbox
+: 97:0;docker stop devbox
+: 98:0;docker exec -it devbox bash
+: 99:0;docker rm -f devbox
+: 100:0;docker image rm <image_id>
+: 101:0;docker image prune -a
+: 102:0;docker system prune -af #remove all unused images/containers/networks
+: 103:0;docker logs -f devbox
+: 104:0;docker pull ubuntu:24.04
+: 105:0;docker compose up -d
+: 106:0;docker compose down
+: 107:0;gh auth status
+: 108:0;gh auth login
+: 109:0;gh pr create --base dev --head feat/name --title "feat: ..."
+: 110:0;gh pr create --base main --head dev --title "chore: release" #release PR dev to main
+: 111:0;gh pr view
+: 112:0;gh pr merge --squash --delete-branch
+: 113:0;gh pr list
+: 114:0;gh pr checks
+: 115:0;gh run view --log
+: 116:0;gh run watch
+: 117:0;gh repo list --limit 200 --json nameWithOwner -q '.[].nameWithOwner'
+: 118:0;gh repo clone <owner>/<repo>
+: 119:0;ollama ls
+: 120:0;ollama ps
+: 121:0;ollama pull llama3.1:8b-instruct
+: 122:0;ollama pull deepseek-r1:8b
+: 123:0;ollama run deepseek-r1:8b
+: 124:0;ollama show deepseek-r1:8b
+: 125:0;ollama stop deepseek-r1:8b
+: 126:0;ollama rm <model>
+: 127:0;ollama list | awk 'NR>1 {print $1}' | xargs -L1 ollama pull #re-pull/update all local models
+: 128:0;nvm ls
+: 129:0;nvm ls-remote
+: 130:0;nvm install 22
+: 131:0;nvm install v24.16.0
+: 132:0;nvm use v24.16.0
+: 133:0;nvm alias default 24
+: 134:0;nvm current
+: 135:0;op signin
+: 136:0;op account list
+: 137:0;op item list --vault "dev"
+: 138:0;op item get "github" --format json #get item as JSON for scripting
+: 139:0;op document get "notebook-git-crypt.key" --vault "dev" --out-file /tmp/key #fetch encrypted key from vault
+: 140:0;op user list
+: 141:0;find . -type f -name "*.ts"
+: 142:0;find . -path ./.git -prune -o -type f -exec chmod 644 {} +
+: 143:0;find . -path ./.git -prune -o -type d -exec chmod 755 {} +
+: 144:0;find . -name '*.age' -type f -exec chmod 644 {} +
+: 145:0;find . -name node_modules -type d -prune -exec rm -rf {} +
+: 146:0;rm -rf node_modules .next .next/dev/lock dist
+: 147:0;tmux new -s repos
+: 148:0;tmux a -t repos
+: 149:0;tmux ls
+: 150:0;tmux kill-session -t repos
+: 151:0;grep -rn "TODO" src
+: 152:0;curl -fsSL <url> | sh
+: 153:0;curl -I <url> #check headers/status without downloading body
+: 154:0;curl -o /dev/null -s -w "%{http_code}\n" <url> #status code only
+: 155:0;wget -c <url> #resumable download
+: 156:0;chmod +x script.sh
+: 157:0;jq '.' file.json #pretty-print/query JSON
+: 158:0;xargs -I{} echo {} #generic placeholder pattern for batch ops
+: 159:0;watch -n 2 <command> #repeat command every N seconds
+: 160:0;diff -u file1 file2 #unified diff between two files
+: 161:0;sed -i '' 's/old/new/g' file #in-place replace, macOS BSD sed syntax
+: 162:0;awk -F',' '{print $1}' file.csv #field extraction template
+: 163:0;crontab -e #edit scheduled jobs
+: 164:0;history | grep <term> #search shell history
+: 165:0;ssh -i ~/.ssh/key user@host #connect with specific key
+: 166:0;scp file user@host:/path #copy file to remote
+: 167:0;tar -xzf file.tar.gz #extract gzip tarball
+: 168:0;tar -czf out.tar.gz dir/ #create gzip tarball
+: 169:0;openssl rand -base64 32 #generate random secret/token
+: 170:0;date +%Y-%m-%d #formatted timestamp for scripts/filenames
+: 171:0;ps aux | grep <name> #find running process
+: 172:0;env | grep <VAR> #check environment variable
+: 173:0;ln -sfv ~/dotfiles/config/zsh/.zshrc ~/.zshrc
+: 174:0;truncate -s 0 $HOME/.zsh_history
+: 175:0;cat $HOME/repos/beratiyilik/dotfiles/shell/zsh/.zsh_history_seed >> $HOME/.zsh_history && fc -R $HOME/.zsh_history #merge seed into history and reload
+: 176:0;cot $HOME/.zsh_history #show raw history file
+: 177:0;tree -I "*.git" | pbcopy
+: 178:0;cat $HOME/repos/beratiyilik/dotfiles/.git/rebase-merge/git-rebase-todo | pbcopy #copy active rebase todo to clipboard
+: 179:0;cat .git/COMMIT_EDITMSG | pbcopy
+: 180:0;rsync -a --exclude='.git' "$HOME/repos/beratiyilik/dotfiles/" "$HOME/dotfiles/" #sync dotfiles repo excluding git metadata
+: 181:0;rsync -avz --dry-run src/ dest/ #preview sync before running
+: 182:0;tgz archived_$(tspid) file1.txt file2.txt dir1 #archive with timestamped name via custom function
+: 183:0;gotop -p -s -r 2s -c monokai
