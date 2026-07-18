@@ -8,7 +8,8 @@
 [[ -n "${__DF_DOCTOR_LOADED:-}" ]] && return 0
 readonly __DF_DOCTOR_LOADED=1
 
-: "${DOTFILES:?DOTFILES not set — run via bin/dotfiles}"
+# $DOTFILES is derived+exported at the entry point (see docs/INTERNALS.md).
+: "${DOTFILES:?DOTFILES not set — derive it at the entry point (see docs/INTERNALS.md)}"
 source "$DOTFILES/core/utils.sh"    # idempotent (self-guarded)
 source "$DOTFILES/core/detect.sh"   # idempotent (self-guarded)
 
@@ -16,9 +17,9 @@ DOCTOR_OK=0
 DOCTOR_WARN=0
 DOCTOR_FAIL=0
 
-_pass() { DOCTOR_OK=$((DOCTOR_OK + 1));     echo -e "${GREEN}[pass]${RESET}  $*"; }
-_warn() { DOCTOR_WARN=$((DOCTOR_WARN + 1)); echo -e "${YELLOW}[warn]${RESET}  $*"; }
-_fail() { DOCTOR_FAIL=$((DOCTOR_FAIL + 1)); echo -e "${RED}[fail]${RESET}  $*"; }
+_pass() { DOCTOR_OK=$((DOCTOR_OK + 1));     echo -e "${FG_GREEN}[pass]${STYLE_RESET}  $*"; }
+_warn() { DOCTOR_WARN=$((DOCTOR_WARN + 1)); echo -e "${FG_YELLOW}[warn]${STYLE_RESET}  $*"; }
+_fail() { DOCTOR_FAIL=$((DOCTOR_FAIL + 1)); echo -e "${FG_RED}[fail]${STYLE_RESET}  $*"; }
 
 # Absorbs the stat difference between macOS (BSD) and Linux (GNU).
 file_mode() {
@@ -160,7 +161,7 @@ run_doctor() {
     check_symlinks || true
     check_misc     || true
     echo
-    echo -e "${GREEN}$DOCTOR_OK ok${RESET}, ${YELLOW}$DOCTOR_WARN warn${RESET}, ${RED}$DOCTOR_FAIL fail${RESET}"
+    echo -e "${FG_GREEN}$DOCTOR_OK ok${STYLE_RESET}, ${FG_YELLOW}$DOCTOR_WARN warn${STYLE_RESET}, ${FG_RED}$DOCTOR_FAIL fail${STYLE_RESET}"
     [[ "$DOCTOR_FAIL" -gt 0 ]] && return 1
     return 0
 }

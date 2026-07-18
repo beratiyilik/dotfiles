@@ -36,6 +36,62 @@ known and exported, so it must **not** re-derive it.
 
 ---
 
+## DOTFILES lifecycle: gates vs libraries
+
+There is exactly **one variable** every part of the repo reads — `$DOTFILES`,
+the absolute repo root, always exported. It is not defined in one shared file
+(nothing could source that file without first knowing the root — a bootstrap
+chicken-and-egg). Instead, **one rule applies at a few gates, and everything
+else inherits.**
+
+**Gates — the only files that derive `$DOTFILES`.** A gate is a cold-start
+boundary: a process/shell that begins without inheriting the value. Each runs
+the same rule — *honor an inherited value, else self-locate from its own
+position, then `export`* — using whatever self-location its interpreter allows:
+
+| Gate | Fires when | Self-locates via |
+| --- | --- | --- |
+| `shell/zsh/.zshenv` | every zsh starts | `${(%):-%x}` (zsh) |
+| `shell/bash/.bashrc` | every bash starts | `BASH_SOURCE` + symlink walk |
+| `bin/dotfiles` | `dotfiles <cmd>` invoked | `dirname "$0"/..` |
+| `os/lib.sh` | an `os/*.sh` runs directly | `dirname "${BASH_SOURCE[0]}"/..` |
+
+Why four and not one: each cold-starts differently (a zsh symlink, a bash
+symlink, a `PATH` command, a directly-run script), and the self-location idiom
+and the depth-to-root differ per interpreter. They cannot collapse to one file,
+but they all obey the one rule.
+
+**Libraries — everything else only reads `$DOTFILES`.** Once a gate exports it,
+the value propagates for free:
+
+- **sourced** into the same shell (`core/*`, `shell/common/*`) — visible in scope;
+- **inherited** by child processes (`core/py/*`, `os/*`, `tools/*`) — via the environment.
+
+A library therefore never self-locates. It asserts and trusts:
+
+```bash
+: "${DOTFILES:?DOTFILES not set — derive it at the entry point (see docs/INTERNALS.md)}"
+source "$DOTFILES/core/<dep>.sh"
+```
+
+If that assertion ever fires, a gate was skipped — surface it, don't paper over
+it with a local re-derivation. (The exceptions are the **pure leaves**
+`core/detect.sh` and `core/palette.sh`, which source nothing and read no
+`$DOTFILES`, so they need no assertion. `core/palette.sh` — the FG_*/STYLE_*
+color constants — is what an interactive shell sources for color, keeping the
+`log()`/`confirm()` engine of `core/utils.sh` out of the prompt, where its bare
+verb names would shadow system commands such as the macOS `log` binary.)
+`tools/*` follow the inherit rule with a sane default,
+`os.environ.get("DOTFILES", Path.home()/"dotfiles")`.
+
+**Lifetime.** In a terminal, `$DOTFILES` is born in `.zshenv`/`.bashrc` on shell
+start, lives the whole session, and is inherited by every command and tool you
+launch. In a `dotfiles` invocation it is born in `bin/dotfiles` and lives for
+that command plus its Python/OS subprocesses. Each cold start re-derives the
+same value; the two lifetimes are independent.
+
+---
+
 ## File invocation types
 
 | Type | Meaning |

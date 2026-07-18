@@ -19,6 +19,12 @@ export DOTFILES
 # shellcheck source=/dev/null
 source "$DOTFILES/shell/common/exports.sh"
 
+# Canonical ANSI palette (FG_*/STYLE_*) the shell/common/* libraries render
+# with. A pure leaf — colors only, no log()/confirm() verbs that would shadow
+# system commands (e.g. the macOS `log` binary). See core/palette.sh, docs/INTERNALS.md.
+# shellcheck source=/dev/null
+source "$DOTFILES/core/palette.sh"
+
 # -------------------------------------------------------- SHELL CONFIGURATION
 
 HISTFILE="$HOME/.bash_history"

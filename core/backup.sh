@@ -3,8 +3,8 @@
 [[ -n "${__DF_BACKUP_LOADED:-}" ]] && return 0
 readonly __DF_BACKUP_LOADED=1
 
-# Reached only via bin/dotfiles, which exports DOTFILES; fail loud if not.
-: "${DOTFILES:?DOTFILES not set — run via bin/dotfiles}"
+# $DOTFILES is derived+exported at the entry point (see docs/INTERNALS.md).
+: "${DOTFILES:?DOTFILES not set — derive it at the entry point (see docs/INTERNALS.md)}"
 source "$DOTFILES/core/utils.sh"   # idempotent (self-guarded)
 source "$DOTFILES/core/paths.sh"   # idempotent (self-guarded)
 

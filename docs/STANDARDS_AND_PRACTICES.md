@@ -6,7 +6,7 @@ See [INTERNALS.md](INTERNALS.md) for the canonical patterns.
 | Role | Where | Shebang | `set -e` | `DOTFILES` guard |
 | --- | --- | --- | --- | --- |
 | **Execute-only script** | `os/macos/*.sh`, `bin/dotfiles` | `#!/usr/bin/env bash` | yes | entry point — self-locates |
-| **Source-only library** | `core/*.sh`, `shell/common/*.sh` | none | inherited | `: "${DOTFILES:?}"` |
+| **Source-only library** | `core/*.sh`, `shell/common/*.sh` | none | inherited | `: "${DOTFILES:?}"` then `source "$DOTFILES/…"` (§1.1) |
 | **Interactive-only library** | `shell/common/tool_loader.sh`, `shell/common/nvm.sh` | none | inherited | `: "${DOTFILES:?}"` |
 
 ---
@@ -22,7 +22,7 @@ Logging via `core/utils.sh` (`log_info/ok/warn/error`). Never calls `exit`.
 [[ -n "${__DF_NAME_LOADED:-}" ]] && return 0
 readonly __DF_NAME_LOADED=1
 
-: "${DOTFILES:?DOTFILES not set — source exports.sh first}"
+: "${DOTFILES:?DOTFILES not set — derive it at the entry point (see docs/INTERNALS.md)}"
 source "$DOTFILES/core/utils.sh"
 
 # implementation
@@ -31,6 +31,25 @@ source "$DOTFILES/core/utils.sh"
 > Interactive-only libraries follow the same pattern but are only sourced from
 > `.zshrc` / `.bashrc` — never from `exports.sh` or non-interactive paths.
 > See [INTERNALS.md](INTERNALS.md) for the tool_loader pattern.
+
+### 1.1 One rule: libraries trust `$DOTFILES`, never derive it
+
+There is exactly one way a library finds its siblings, and it is the skeleton
+above: **assert `$DOTFILES`, then `source "$DOTFILES/…"`**. A library never
+self-locates — no `BASH_SOURCE` dirname walk, no `if/else` hybrid, no `..`.
+
+This works because `$DOTFILES` is *always* derived and exported at the entry
+point before any library is reached — `bin/dotfiles`, `.zshenv`, `.bashrc`, and
+`os/lib.sh` each do it (see [INTERNALS.md](INTERNALS.md), "DOTFILES lifecycle").
+Self-location lives only in those gates; everything sourced downstream trusts
+the exported value. A library sourced without `$DOTFILES` therefore fails loud
+by design — that means a gate was skipped, which is the bug worth surfacing.
+
+The one exception is a **pure leaf** that sources nothing and reads no
+`$DOTFILES` (`core/detect.sh` and `core/palette.sh` qualify): it needs no
+assertion at all, and — reading no `$DOTFILES` — may be sourced from anywhere,
+including interactive `.zshrc`/`.bashrc` (which pull in `core/palette.sh` for
+color without dragging in the `core/utils.sh` log engine).
 
 ---
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Source-only library (see docs/INTERNALS.md). Idempotent: guarded
-# against double-sourcing via __DF_DETECT_LOADED.
+# against double-sourcing via __DF_DETECT_LOADED. Pure leaf: sources nothing and
+# uses no $DOTFILES, so it carries no assertion.
 [[ -n "${__DF_DETECT_LOADED:-}" ]] && return 0
 readonly __DF_DETECT_LOADED=1
 

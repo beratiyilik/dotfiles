@@ -5,7 +5,7 @@
 [[ -n "${__DF_TOOL_LOADER_LOADED:-}" ]] && return 0
 readonly __DF_TOOL_LOADER_LOADED=1
 
-: "${DOTFILES:?DOTFILES not set — source exports.sh first}"
+: "${DOTFILES:?DOTFILES not set — derive it at the entry point (see docs/INTERNALS.md)}"
 
 [[ "${DOTFILES_ENABLE_NVM:-false}"             == "true" ]] && source "$DOTFILES/shell/common/nvm.sh"
 [[ "${DOTFILES_ENABLE_GIT_HELPERS:-false}"     == "true" ]] && source "$DOTFILES/shell/common/git.sh"

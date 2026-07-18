@@ -3,7 +3,7 @@
 # `dotfiles os` (linux). Runs under set -e, so it is fault-tolerant.
 [[ "$(uname -s)" == "Linux" ]] || return 0
 
-: "${DOTFILES:?DOTFILES not set — run via bin/dotfiles}"
+: "${DOTFILES:?DOTFILES not set — derive it at the entry point (see docs/INTERNALS.md)}"
 source "$DOTFILES/core/utils.sh"   # idempotent (self-guarded)
 
 APT=""

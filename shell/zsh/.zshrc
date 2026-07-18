@@ -16,6 +16,11 @@ if [[ -z "${DOTFILES:-}" ]] || ! typeset -f path_prepend >/dev/null 2>&1; then
   source "$DOTFILES/shell/common/exports.sh"
 fi
 
+# Canonical ANSI palette (FG_*/STYLE_*) the shell/common/* libraries render
+# with. A pure leaf — colors only, no log()/confirm() verbs that would shadow
+# system commands (e.g. the macOS `log` binary). See core/palette.sh, docs/INTERNALS.md.
+source "$DOTFILES/core/palette.sh"
+
 # -------------------------------------------------------- SHELL CONFIGURATION
 
 # history settings

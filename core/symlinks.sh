@@ -3,7 +3,8 @@
 [[ -n "${__DF_SYMLINKS_LOADED:-}" ]] && return 0
 readonly __DF_SYMLINKS_LOADED=1
 
-: "${DOTFILES:?DOTFILES not set — run via bin/dotfiles}"
+# $DOTFILES is derived+exported at the entry point (see docs/INTERNALS.md).
+: "${DOTFILES:?DOTFILES not set — derive it at the entry point (see docs/INTERNALS.md)}"
 source "$DOTFILES/core/utils.sh"    # idempotent (self-guarded)
 source "$DOTFILES/core/backup.sh"   # idempotent (self-guarded)
 

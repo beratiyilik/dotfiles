@@ -38,9 +38,17 @@ set -o nounset
 set -o pipefail
 IFS=$'\n\t'
 
-# Shared predicate guards (is_macos / is_linux / is_arm64 / has_cmd); lives in
-# core/, one level up + over. Self-guarded and dependency-free.
-source "$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../core/guards.sh"
+# Entry-point boundary: os/*.sh are execute-only and, when run directly, inherit
+# no $DOTFILES. Derive+export it once here (honoring an inherited value from a
+# bin/dotfiles subprocess) so every core library below can simply trust it. This
+# is the os counterpart of the derivation in bin/dotfiles / .zshenv / .bashrc.
+# Execute-only scripts run in bash, where BASH_SOURCE is reliable.
+: "${DOTFILES:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+export DOTFILES
+
+# Logging engine, ANSI palette, and predicate guards come from core/utils.sh
+# (the repo-wide standard).
+source "$DOTFILES/core/utils.sh"
 
 # =============================================================================
 # exit codes
@@ -52,60 +60,17 @@ source "$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../core/guards.sh"
 : "${EXIT_CMD_NOT_FOUND:=127}"; readonly EXIT_CMD_NOT_FOUND
 
 # =============================================================================
-# ANSI style constants
-# =============================================================================
-
-# attributes
-: "${STYLE_RESET:=\033[0m}";     readonly STYLE_RESET
-: "${STYLE_BOLD:=\033[1m}";      readonly STYLE_BOLD
-: "${STYLE_BLINK_ON:=\033[5m}";  readonly STYLE_BLINK_ON
-: "${STYLE_BLINK_OFF:=\033[25m}"; readonly STYLE_BLINK_OFF
-
-# foreground colors
-: "${FG_BLUE:=\033[38;5;31m}";    readonly FG_BLUE
-: "${FG_CYAN:=\033[38;5;66m}";    readonly FG_CYAN
-: "${FG_GRAY:=\033[38;5;244m}";   readonly FG_GRAY
-: "${FG_GREEN:=\033[38;5;76m}";   readonly FG_GREEN
-: "${FG_MAGENTA:=\033[0;35m}";    readonly FG_MAGENTA
-: "${FG_RED:=\033[38;5;196m}";    readonly FG_RED
-: "${FG_WHITE:=\033[0;37m}";      readonly FG_WHITE
-: "${FG_YELLOW:=\033[38;5;220m}"; readonly FG_YELLOW
-
-# =============================================================================
 # logging
 # =============================================================================
 
-# log <level> <message>
-# Levels: DEBUG INFO SUCCESS WARN ERROR
-# Respects $SILENT and $VERBOSE globals.
-# WARN and ERROR always go to stderr.
-# ERROR always prints regardless of SILENT.
-log() {
-	local level="${1:-INFO}"
-	local message="${2:-}"
-	local upper_level
-	upper_level=$(echo "$level" | tr '[:lower:]' '[:upper:]')
-
-	# ERROR always prints; everything else suppressed when SILENT=true
-	if [[ "$upper_level" != "ERROR" && "${SILENT:-false}" == true ]]; then return; fi
-	# non-ERROR suppressed when VERBOSE=false
-	if [[ "$upper_level" != "ERROR" && "${VERBOSE:-true}" == false ]]; then return; fi
-
-	case "$upper_level" in
-	DEBUG)   printf "${FG_MAGENTA}[DEBUG]${STYLE_RESET} %s\n"           "$message" ;;
-	INFO)    printf "${FG_BLUE}[INFO]${STYLE_RESET} %s\n"               "$message" ;;
-	SUCCESS) printf "${FG_GREEN}[SUCCESS]${STYLE_RESET} %s\n"           "$message" ;;
-	WARN)    printf "${FG_YELLOW}[WARN]${STYLE_RESET} %s\n"             "$message" >&2 ;;
-	ERROR)   printf "${FG_RED}[ERROR]${STYLE_RESET} %s\n"               "$message" >&2 ;;
-	*)       printf "${FG_WHITE}[%s]${STYLE_RESET} %s\n" "$upper_level" "$message" >&2 ;;
-	esac
-}
-
-debug()   { log "DEBUG"   "$1"; }
-info()    { log "INFO"    "$1"; }
-success() { log "SUCCESS" "$1"; }
-warn()    { log "WARN"    "$1"; }
-error()   { log "ERROR"   "$1"; }
+# The ANSI palette and the level-aware log() live in core/utils.sh (sourced
+# above). These short-name wrappers are the log API the execute-only os/*.sh
+# scripts use; success maps to the OK level. All scale with $SILENT / $VERBOSE.
+debug()   { log DEBUG "$*"; }
+info()    { log INFO  "$*"; }
+success() { log OK    "$*"; }
+warn()    { log WARN  "$*"; }
+error()   { log ERROR "$*"; }
 
 # =============================================================================
 # run_cmd

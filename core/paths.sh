@@ -4,14 +4,14 @@
 [[ -n "${__DF_PATHS_LOADED:-}" ]] && return 0
 readonly __DF_PATHS_LOADED=1
 
-# Repo root, derived from this file's location so it works both via bin/dotfiles
-# (DOTFILES set) and when a script is run standalone (DOTFILES unset).
-__DF_PATHS_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# $DOTFILES is derived+exported at the entry point (see docs/INTERNALS.md);
+# libraries only ever trust it.
+: "${DOTFILES:?DOTFILES not set — derive it at the entry point (see docs/INTERNALS.md)}"
 
 # All backup and snapshot output lives under one gitignored root. Honored from
 # the environment if already set (handy for isolated tests / redirecting output);
 # otherwise derived from the repo root.
-DF_BACKUPS_ROOT="${DF_BACKUPS_ROOT:-${DOTFILES:-$__DF_PATHS_DIR}/backups}"
+DF_BACKUPS_ROOT="${DF_BACKUPS_ROOT:-$DOTFILES/backups}"
 DF_BACKUP_TS_FORMAT="%Y%m%d_%H%M%S"
 
 # df_backup_stamp → "<timestamp>_<pid>", the per-run identifier.
